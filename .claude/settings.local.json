@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(mkdir:*)",
+      "Bash(pip install:*)",
+      "Bash(python -m uvicorn:*)",
+      "Bash(netstat:*)",
+      "Bash(findstr:*)",
+      "Bash(taskkill /F /PID 67136)",
+      "Bash(taskkill:*)",
+      "Bash(curl:*)",
+      "Bash(cat:*)",
+      "Bash(python -c:*)",
+      "Bash(docker exec:*)",
+      "Bash(python:*)",
+      "Bash(del \"c:\\Users\\badre zouiri\\OneDrive\\Bureau\\Project\\Casdy IA\\backend\\test_heartsync.py\")",
+      "Bash(cmd /c \"taskkill /F /PID 57120\")",
+      "Bash(cmd /c \"taskkill /F /PID 67136\")",
+      "Bash(cmd /c:*)",
+      "Bash(powershell -Command \"Stop-Process -Id 67136 -Force\")",
+      "Bash(tasklist /FI \"IMAGENAME eq python.exe\")",
+      "Bash(dir:*)",
+      "Bash(net start:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker start:*)",
+      "Bash(timeout /t 3 /nobreak)",
+      "Bash(powershell -Command \"(Get-Item ''c:\\Users\\badre zouiri\\OneDrive\\Bureau\\Project\\Casdy IA\\backend\\image_service.py'').LastWriteTime = Get-Date\")",
+      "Bash(powershell -Command:*)",
+      "Bash(tasklist /FI 'IMAGENAME eq python.exe' /FO CSV)",
+      "Bash(timeout /t 5 /nobreak)",
+      "Bash(timeout /t 2 /nobreak)",
+      "Bash(chcp:*)",
+      "Bash(PYTHONIOENCODING=utf-8 python:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

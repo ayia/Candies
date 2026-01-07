@@ -1,0 +1,1887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Candy AI Clone</title>
+    <style>
+        :root {
+            --bg-primary: #0f0f1a;
+            --bg-secondary: #1a1a2e;
+            --bg-tertiary: #252542;
+            --accent-pink: #e94560;
+            --accent-purple: #7c3aed;
+            --accent-gradient: linear-gradient(135deg, #e94560, #7c3aed);
+            --text-primary: #ffffff;
+            --text-secondary: #a0a0b0;
+            --text-muted: #6b6b7b;
+            --border-color: #2d2d4a;
+            --success: #10b981;
+            --error: #ef4444;
+            --warning: #f59e0b;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            line-height: 1.6;
+        }
+
+        /* Layout */
+        .app-container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 280px;
+            background: var(--bg-secondary);
+            border-right: 1px solid var(--border-color);
+            display: flex;
+            flex-direction: column;
+            flex-shrink: 0;
+        }
+
+        .sidebar-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: 700;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .sidebar-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 15px;
+        }
+
+        .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-primary {
+            background: var(--accent-gradient);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border-color);
+        }
+
+        .btn-danger {
+            background: var(--error);
+            color: white;
+        }
+
+        .btn-block {
+            width: 100%;
+        }
+
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        /* Character Cards */
+        .character-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .character-card {
+            background: var(--bg-tertiary);
+            border-radius: 12px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+
+        .character-card:hover {
+            border-color: var(--accent-pink);
+        }
+
+        .character-card.active {
+            border-color: var(--accent-purple);
+            background: rgba(124, 58, 237, 0.1);
+        }
+
+        .character-name {
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 4px;
+        }
+
+        .character-tagline {
+            font-size: 13px;
+            color: var(--text-secondary);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Chat Area */
+        .chat-header {
+            padding: 15px 20px;
+            background: var(--bg-secondary);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .chat-header-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .chat-avatar {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--accent-gradient);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .message {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 16px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background: var(--accent-gradient);
+            color: white;
+            border-bottom-right-radius: 4px;
+        }
+
+        .message.assistant {
+            align-self: flex-start;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border-bottom-left-radius: 4px;
+        }
+
+        .message-image {
+            max-width: 300px;
+            border-radius: 12px;
+            margin-top: 10px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .message-image:hover {
+            transform: scale(1.02);
+        }
+
+        .chat-input-container {
+            padding: 15px 20px;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+            flex-shrink: 0;
+            position: sticky;
+            bottom: 0;
+        }
+
+        .chat-input-wrapper {
+            display: flex;
+            gap: 10px;
+            align-items: flex-end;
+        }
+
+        .chat-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 24px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 14px;
+            resize: none;
+            max-height: 120px;
+            outline: none;
+        }
+
+        .chat-input:focus {
+            border-color: var(--accent-pink);
+        }
+
+        .send-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: var(--accent-gradient);
+            border: none;
+            color: white;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: transform 0.2s;
+        }
+
+        .send-btn:hover {
+            transform: scale(1.05);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Welcome Screen */
+        .welcome-screen {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .welcome-title {
+            font-size: 32px;
+            font-weight: 700;
+            margin-bottom: 15px;
+            background: var(--accent-gradient);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .welcome-text {
+            color: var(--text-secondary);
+            margin-bottom: 30px;
+            max-width: 400px;
+        }
+
+        /* Modal */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            padding: 20px;
+        }
+
+        .modal {
+            background: var(--bg-secondary);
+            border-radius: 16px;
+            max-width: 800px;
+            width: 100%;
+            max-height: 90vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .modal-title {
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 24px;
+            cursor: pointer;
+            padding: 5px;
+        }
+
+        .modal-close:hover {
+            color: var(--text-primary);
+        }
+
+        .modal-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px;
+        }
+
+        .modal-footer {
+            padding: 15px 20px;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+        }
+
+        /* Form Elements */
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: var(--text-primary);
+        }
+
+        .form-input, .form-select, .form-textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 14px;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .form-input:focus, .form-select:focus, .form-textarea:focus {
+            border-color: var(--accent-pink);
+        }
+
+        .form-textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .form-select {
+            cursor: pointer;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        .form-row-3 {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+
+        /* Checkbox Group */
+        .checkbox-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 13px;
+        }
+
+        .checkbox-item:hover {
+            border-color: var(--accent-pink);
+        }
+
+        .checkbox-item.selected {
+            background: rgba(233, 69, 96, 0.2);
+            border-color: var(--accent-pink);
+            color: var(--accent-pink);
+        }
+
+        .checkbox-item input {
+            display: none;
+        }
+
+        /* Steps Progress */
+        .steps-progress {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 25px;
+        }
+
+        .step-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+            transition: all 0.2s;
+        }
+
+        .step-dot.active {
+            background: var(--accent-pink);
+            transform: scale(1.2);
+        }
+
+        .step-dot.completed {
+            background: var(--accent-purple);
+        }
+
+        .step-title {
+            text-align: center;
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+        }
+
+        /* Style Selection */
+        .style-options {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+
+        .style-option {
+            padding: 30px 20px;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .style-option:hover {
+            border-color: var(--accent-pink);
+        }
+
+        .style-option.selected {
+            border-color: var(--accent-pink);
+            background: rgba(233, 69, 96, 0.1);
+        }
+
+        .style-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+
+        .style-name {
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        /* Gallery */
+        .gallery-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 15px;
+        }
+
+        .gallery-item {
+            position: relative;
+            aspect-ratio: 3/4;
+            border-radius: 12px;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .gallery-item img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            transition: transform 0.2s;
+        }
+
+        .gallery-item:hover img {
+            transform: scale(1.05);
+        }
+
+        .gallery-item-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(transparent 60%, rgba(0,0,0,0.7));
+            opacity: 0;
+            transition: opacity 0.2s;
+            display: flex;
+            align-items: flex-end;
+            padding: 10px;
+        }
+
+        .gallery-item:hover .gallery-item-overlay {
+            opacity: 1;
+        }
+
+        /* Image Modal */
+        .image-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.95);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 2000;
+            padding: 20px;
+        }
+
+        .image-modal img {
+            max-width: 90%;
+            max-height: 90%;
+            object-fit: contain;
+            border-radius: 8px;
+        }
+
+        .image-modal-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 32px;
+            cursor: pointer;
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            gap: 5px;
+            padding: 10px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .tab {
+            flex: 1;
+            padding: 10px 15px;
+            border: none;
+            background: transparent;
+            color: var(--text-secondary);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            color: var(--text-primary);
+        }
+
+        .tab.active {
+            background: var(--accent-gradient);
+            color: white;
+        }
+
+        /* Image Generator Panel */
+        .image-generator {
+            padding: 20px;
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border-color);
+            width: 300px;
+            overflow-y: auto;
+        }
+
+        .image-generator-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+
+        /* Conversation List */
+        .conversation-item {
+            padding: 12px;
+            background: var(--bg-tertiary);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .conversation-item:hover {
+            background: var(--border-color);
+        }
+
+        .conversation-item.active {
+            border-left: 3px solid var(--accent-pink);
+        }
+
+        .conversation-title {
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 4px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .conversation-preview {
+            font-size: 12px;
+            color: var(--text-muted);
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Loading */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--text-secondary);
+            border-radius: 50%;
+            border-top-color: var(--accent-pink);
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 15px;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            background: var(--text-secondary);
+            border-radius: 50%;
+            animation: typingBounce 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typingBounce {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-8px); }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: -280px;
+                top: 0;
+                bottom: 0;
+                z-index: 100;
+                transition: left 0.3s;
+            }
+
+            .sidebar.open {
+                left: 0;
+            }
+
+            .image-generator {
+                position: fixed;
+                right: -300px;
+                top: 0;
+                bottom: 0;
+                z-index: 100;
+                transition: right 0.3s;
+            }
+
+            .image-generator.open {
+                right: 0;
+            }
+
+            .message {
+                max-width: 85%;
+            }
+
+            .form-row, .form-row-3 {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Hide scrollbar but allow scrolling */
+        .sidebar-content::-webkit-scrollbar,
+        .chat-messages::-webkit-scrollbar,
+        .modal-body::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .sidebar-content::-webkit-scrollbar-track,
+        .chat-messages::-webkit-scrollbar-track,
+        .modal-body::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .sidebar-content::-webkit-scrollbar-thumb,
+        .chat-messages::-webkit-scrollbar-thumb,
+        .modal-body::-webkit-scrollbar-thumb {
+            background: var(--border-color);
+            border-radius: 3px;
+        }
+
+        /* Hidden */
+        .hidden {
+            display: none !important;
+        }
+
+        /* Character count */
+        .char-count {
+            font-size: 12px;
+            color: var(--text-muted);
+            text-align: right;
+            margin-top: 4px;
+        }
+
+        .char-count.warning {
+            color: var(--warning);
+        }
+
+        .char-count.error {
+            color: var(--error);
+        }
+    </style>
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="logo">Candy AI</div>
+            </div>
+            <div class="sidebar-content">
+                <button class="btn btn-primary btn-block" onclick="openCreateCharacterModal()" style="margin-bottom: 20px;">
+                    + Create Character
+                </button>
+
+                <div class="character-list" id="characterList">
+                    <!-- Characters will be loaded here -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content" id="mainContent">
+            <!-- Welcome Screen (shown when no character selected) -->
+            <div class="welcome-screen" id="welcomeScreen">
+                <div class="welcome-title">Welcome to Candy AI</div>
+                <p class="welcome-text">Create your perfect AI companion and start chatting. Select a character from the sidebar or create a new one.</p>
+                <button class="btn btn-primary" onclick="openCreateCharacterModal()">
+                    Create Your First Character
+                </button>
+            </div>
+
+            <!-- Chat View (hidden by default) -->
+            <div class="hidden" id="chatView" style="display: none; flex-direction: column; height: 100%;">
+                <div class="chat-header">
+                    <div class="chat-header-info">
+                        <div class="chat-avatar" id="chatAvatar">A</div>
+                        <div>
+                            <div class="character-name" id="chatCharacterName">Character Name</div>
+                            <div class="character-tagline" id="chatCharacterTagline">Tagline</div>
+                        </div>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-secondary btn-sm" onclick="openGalleryModal()">Gallery</button>
+                        <button class="btn btn-secondary btn-sm" onclick="openImageGeneratorModal()">Generate Image</button>
+                        <button class="btn btn-secondary btn-sm" onclick="openConversationsModal()">Conversations</button>
+                    </div>
+                </div>
+
+                <div class="chat-messages" id="chatMessages">
+                    <!-- Messages will be loaded here -->
+                </div>
+
+                <div class="chat-input-container">
+                    <div class="chat-input-wrapper">
+                        <textarea
+                            class="chat-input"
+                            id="messageInput"
+                            placeholder="Type your message..."
+                            rows="1"
+                            onkeydown="handleInputKeydown(event)"
+                        ></textarea>
+                        <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Create Character Modal -->
+    <div class="modal-overlay hidden" id="createCharacterModal">
+        <div class="modal" style="max-width: 600px;">
+            <div class="modal-header">
+                <div class="modal-title">Create Character</div>
+                <button class="modal-close" onclick="closeCreateCharacterModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="steps-progress" id="stepsProgress">
+                    <!-- Step dots generated by JS -->
+                </div>
+                <div class="step-title" id="stepTitle">Step 1: Choose Style</div>
+                <div id="stepContent">
+                    <!-- Step content will be loaded here -->
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="prevStepBtn" onclick="prevStep()" style="display: none;">Back</button>
+                <button class="btn btn-primary" id="nextStepBtn" onclick="nextStep()">Next</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Gallery Modal -->
+    <div class="modal-overlay hidden" id="galleryModal">
+        <div class="modal">
+            <div class="modal-header">
+                <div class="modal-title">Gallery</div>
+                <button class="modal-close" onclick="closeGalleryModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="gallery-grid" id="galleryGrid">
+                    <!-- Images will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image Generator Modal -->
+    <div class="modal-overlay hidden" id="imageGeneratorModal">
+        <div class="modal" style="max-width: 500px;">
+            <div class="modal-header">
+                <div class="modal-title">Generate Image</div>
+                <button class="modal-close" onclick="closeImageGeneratorModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="form-label">Pose</label>
+                    <select class="form-select" id="imagePose">
+                        <option value="">Auto</option>
+                        <option value="standing">Standing</option>
+                        <option value="sitting">Sitting</option>
+                        <option value="lying on bed">Lying on bed</option>
+                        <option value="mirror selfie">Mirror selfie</option>
+                        <option value="from behind">From behind</option>
+                        <option value="close-up face">Close-up face</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Location</label>
+                    <select class="form-select" id="imageLocation">
+                        <option value="">Auto</option>
+                        <option value="bedroom">Bedroom</option>
+                        <option value="bathroom">Bathroom</option>
+                        <option value="shower">Shower</option>
+                        <option value="living room">Living room</option>
+                        <option value="kitchen">Kitchen</option>
+                        <option value="beach">Beach</option>
+                        <option value="pool">Pool</option>
+                        <option value="outdoor">Outdoor</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Outfit</label>
+                    <select class="form-select" id="imageOutfit">
+                        <option value="">Character's usual outfit</option>
+                        <option value="lingerie">Lingerie</option>
+                        <option value="bikini">Bikini</option>
+                        <option value="nude">Nude</option>
+                        <option value="casual clothes">Casual clothes</option>
+                        <option value="elegant dress">Elegant dress</option>
+                        <option value="workout clothes">Workout clothes</option>
+                        <option value="schoolgirl outfit">Schoolgirl outfit</option>
+                        <option value="maid outfit">Maid outfit</option>
+                        <option value="nurse outfit">Nurse outfit</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Custom additions (optional)</label>
+                    <input type="text" class="form-input" id="imageCustom" placeholder="e.g., smiling, wet hair, dim lighting">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Number of images</label>
+                    <select class="form-select" id="imageCount">
+                        <option value="1">1 image</option>
+                        <option value="2">2 images</option>
+                        <option value="3">3 images</option>
+                        <option value="4">4 images</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeImageGeneratorModal()">Cancel</button>
+                <button class="btn btn-primary" id="generateImageBtn" onclick="generateImages()">Generate</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Conversations Modal -->
+    <div class="modal-overlay hidden" id="conversationsModal">
+        <div class="modal" style="max-width: 500px;">
+            <div class="modal-header">
+                <div class="modal-title">Conversations</div>
+                <button class="modal-close" onclick="closeConversationsModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <button class="btn btn-primary btn-block" onclick="startNewConversation()" style="margin-bottom: 15px;">
+                    + New Conversation
+                </button>
+                <div id="conversationsList">
+                    <!-- Conversations will be loaded here -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Image View Modal -->
+    <div class="image-modal hidden" id="imageViewModal" onclick="closeImageViewModal()">
+        <button class="image-modal-close">&times;</button>
+        <img id="imageViewContent" src="" alt="Full size image">
+    </div>
+
+    <script>
+        // =====================
+        // STATE
+        // =====================
+        const state = {
+            characters: [],
+            currentCharacter: null,
+            currentConversationId: null,
+            messages: [],
+            isLoading: false,
+            createCharacterData: {},
+            currentStep: 1,
+            totalSteps: 15
+        };
+
+        // =====================
+        // API FUNCTIONS
+        // =====================
+        const API_BASE = '/api';
+
+        async function apiCall(endpoint, options = {}) {
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    headers: {
+                        'Content-Type': 'application/json',
+                        ...options.headers
+                    },
+                    ...options
+                });
+
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({ detail: 'Unknown error' }));
+                    throw new Error(error.detail || 'API request failed');
+                }
+
+                return await response.json();
+            } catch (error) {
+                console.error('API Error:', error);
+                throw error;
+            }
+        }
+
+        // =====================
+        // CHARACTER FUNCTIONS
+        // =====================
+        async function loadCharacters() {
+            try {
+                state.characters = await apiCall('/characters');
+                renderCharacterList();
+            } catch (error) {
+                console.error('Failed to load characters:', error);
+            }
+        }
+
+        function renderCharacterList() {
+            const list = document.getElementById('characterList');
+
+            if (state.characters.length === 0) {
+                list.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 20px;">No characters yet</p>';
+                return;
+            }
+
+            list.innerHTML = state.characters.map(char => `
+                <div class="character-card ${state.currentCharacter?.id === char.id ? 'active' : ''}"
+                     onclick="selectCharacter(${char.id})">
+                    <div class="character-name">${escapeHtml(char.name)}</div>
+                    <div class="character-tagline">${escapeHtml(char.tagline || char.relationship_type || 'No tagline')}</div>
+                </div>
+            `).join('');
+        }
+
+        async function selectCharacter(characterId) {
+            try {
+                state.currentCharacter = await apiCall(`/characters/${characterId}`);
+                state.currentConversationId = null;
+                state.messages = [];
+
+                // Update UI
+                document.getElementById('welcomeScreen').style.display = 'none';
+                document.getElementById('chatView').style.display = 'flex';
+                document.getElementById('chatView').classList.remove('hidden');
+
+                document.getElementById('chatAvatar').textContent = state.currentCharacter.name.charAt(0).toUpperCase();
+                document.getElementById('chatCharacterName').textContent = state.currentCharacter.name;
+                document.getElementById('chatCharacterTagline').textContent = state.currentCharacter.tagline || state.currentCharacter.relationship_type || '';
+
+                renderCharacterList();
+
+                // Try to load the most recent conversation, or start a new one if none exists
+                await loadOrCreateConversation();
+            } catch (error) {
+                alert('Failed to select character');
+            }
+        }
+
+        async function loadOrCreateConversation() {
+            if (!state.currentCharacter) return;
+
+            try {
+                // Fetch existing conversations for this character
+                const conversations = await apiCall(`/characters/${state.currentCharacter.id}/conversations`);
+
+                if (conversations && conversations.length > 0) {
+                    // Load the most recent conversation (first in the list)
+                    await loadConversation(conversations[0].id);
+                } else {
+                    // No existing conversations, create a new one
+                    await startNewConversation();
+                }
+            } catch (error) {
+                console.error('Failed to load conversations, starting new one:', error);
+                await startNewConversation();
+            }
+        }
+
+        async function createCharacter(data) {
+            try {
+                const character = await apiCall('/characters', {
+                    method: 'POST',
+                    body: JSON.stringify(data)
+                });
+
+                state.characters.unshift(character);
+                renderCharacterList();
+                closeCreateCharacterModal();
+                selectCharacter(character.id);
+            } catch (error) {
+                alert('Failed to create character: ' + error.message);
+            }
+        }
+
+        // =====================
+        // CONVERSATION FUNCTIONS
+        // =====================
+        async function startNewConversation() {
+            if (!state.currentCharacter) return;
+
+            try {
+                const result = await apiCall('/conversations', {
+                    method: 'POST',
+                    body: JSON.stringify({ character_id: state.currentCharacter.id })
+                });
+
+                state.currentConversationId = result.conversation_id;
+                state.messages = [];
+
+                if (result.greeting) {
+                    state.messages.push({
+                        role: 'assistant',
+                        content: result.greeting,
+                        image_url: null
+                    });
+                }
+
+                renderMessages();
+                closeConversationsModal();
+            } catch (error) {
+                console.error('Failed to start conversation:', error);
+            }
+        }
+
+        async function loadConversation(conversationId) {
+            try {
+                const data = await apiCall(`/conversations/${conversationId}`);
+                state.currentConversationId = data.conversation_id;
+                state.messages = data.messages;
+                renderMessages();
+                closeConversationsModal();
+            } catch (error) {
+                alert('Failed to load conversation');
+            }
+        }
+
+        async function loadConversationsList() {
+            if (!state.currentCharacter) return;
+
+            try {
+                const conversations = await apiCall(`/characters/${state.currentCharacter.id}/conversations`);
+                const list = document.getElementById('conversationsList');
+
+                if (conversations.length === 0) {
+                    list.innerHTML = '<p style="color: var(--text-secondary); text-align: center;">No conversations yet</p>';
+                    return;
+                }
+
+                list.innerHTML = conversations.map(conv => `
+                    <div class="conversation-item ${state.currentConversationId === conv.id ? 'active' : ''}"
+                         onclick="loadConversation(${conv.id})">
+                        <div class="conversation-title">${escapeHtml(conv.title || 'Untitled')}</div>
+                        <div class="conversation-preview">${escapeHtml(conv.last_message || 'No messages')}</div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load conversations:', error);
+            }
+        }
+
+        // =====================
+        // CHAT FUNCTIONS
+        // =====================
+        async function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const message = input.value.trim();
+
+            if (!message || !state.currentCharacter || state.isLoading) return;
+
+            state.isLoading = true;
+            document.getElementById('sendBtn').disabled = true;
+
+            // Add user message
+            state.messages.push({
+                role: 'user',
+                content: message,
+                image_url: null
+            });
+            renderMessages();
+
+            input.value = '';
+            input.style.height = 'auto';
+
+            // Show typing indicator
+            showTypingIndicator();
+
+            try {
+                const response = await apiCall(`/characters/${state.currentCharacter.id}/chat`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        message: message,
+                        conversation_id: state.currentConversationId
+                    })
+                });
+
+                state.currentConversationId = response.conversation_id;
+
+                // Remove typing indicator and add response
+                hideTypingIndicator();
+                state.messages.push({
+                    role: 'assistant',
+                    content: response.response,
+                    image_url: response.image_url
+                });
+                renderMessages();
+
+            } catch (error) {
+                hideTypingIndicator();
+                state.messages.push({
+                    role: 'assistant',
+                    content: 'Sorry, I encountered an error. Please try again.',
+                    image_url: null
+                });
+                renderMessages();
+            }
+
+            state.isLoading = false;
+            document.getElementById('sendBtn').disabled = false;
+        }
+
+        function renderMessages() {
+            const container = document.getElementById('chatMessages');
+
+            container.innerHTML = state.messages.map(msg => `
+                <div class="message ${msg.role}">
+                    <div>${formatMessage(msg.content)}</div>
+                    ${msg.image_url ? `<img src="${msg.image_url}" class="message-image" onclick="openImageView('${msg.image_url}')">` : ''}
+                </div>
+            `).join('');
+
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function formatMessage(text) {
+            return escapeHtml(text).replace(/\n/g, '<br>');
+        }
+
+        function showTypingIndicator() {
+            const container = document.getElementById('chatMessages');
+            const indicator = document.createElement('div');
+            indicator.className = 'message assistant';
+            indicator.id = 'typingIndicator';
+            indicator.innerHTML = `
+                <div class="typing-indicator">
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                    <div class="typing-dot"></div>
+                </div>
+            `;
+            container.appendChild(indicator);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function hideTypingIndicator() {
+            const indicator = document.getElementById('typingIndicator');
+            if (indicator) indicator.remove();
+        }
+
+        function handleInputKeydown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        // =====================
+        // IMAGE FUNCTIONS
+        // =====================
+        async function generateImages() {
+            if (!state.currentCharacter) return;
+
+            const btn = document.getElementById('generateImageBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Generating...';
+
+            try {
+                const images = await apiCall(`/characters/${state.currentCharacter.id}/generate-image`, {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        pose: document.getElementById('imagePose').value || null,
+                        location: document.getElementById('imageLocation').value || null,
+                        outfit: document.getElementById('imageOutfit').value || null,
+                        custom: document.getElementById('imageCustom').value || null,
+                        count: parseInt(document.getElementById('imageCount').value)
+                    })
+                });
+
+                closeImageGeneratorModal();
+
+                // Show the first generated image in chat
+                if (images.length > 0) {
+                    state.messages.push({
+                        role: 'assistant',
+                        content: `Here's what you asked for! 😘`,
+                        image_url: images[0].image_url
+                    });
+                    renderMessages();
+                }
+
+            } catch (error) {
+                alert('Failed to generate image: ' + error.message);
+            }
+
+            btn.disabled = false;
+            btn.textContent = 'Generate';
+        }
+
+        async function loadGallery() {
+            if (!state.currentCharacter) return;
+
+            try {
+                const data = await apiCall(`/characters/${state.currentCharacter.id}/gallery`);
+                const grid = document.getElementById('galleryGrid');
+
+                if (data.images.length === 0) {
+                    grid.innerHTML = '<p style="color: var(--text-secondary); text-align: center; grid-column: 1/-1;">No images yet. Generate some!</p>';
+                    return;
+                }
+
+                grid.innerHTML = data.images.map(img => `
+                    <div class="gallery-item" onclick="openImageView('${img.image_url}')">
+                        <img src="${img.image_url}" alt="Generated image">
+                        <div class="gallery-item-overlay">
+                            <button class="btn btn-danger btn-sm" onclick="event.stopPropagation(); deleteImage(${img.id})">Delete</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load gallery:', error);
+            }
+        }
+
+        async function deleteImage(imageId) {
+            if (!confirm('Delete this image?')) return;
+
+            try {
+                await apiCall(`/images/${imageId}`, { method: 'DELETE' });
+                loadGallery();
+            } catch (error) {
+                alert('Failed to delete image');
+            }
+        }
+
+        function openImageView(url) {
+            document.getElementById('imageViewContent').src = url;
+            document.getElementById('imageViewModal').classList.remove('hidden');
+        }
+
+        function closeImageViewModal() {
+            document.getElementById('imageViewModal').classList.add('hidden');
+        }
+
+        // =====================
+        // MODAL FUNCTIONS
+        // =====================
+        function openCreateCharacterModal() {
+            state.createCharacterData = {};
+            state.currentStep = 1;
+            document.getElementById('createCharacterModal').classList.remove('hidden');
+            renderStep();
+        }
+
+        function closeCreateCharacterModal() {
+            document.getElementById('createCharacterModal').classList.add('hidden');
+            state.createCharacterData = {};
+            state.currentStep = 1;
+        }
+
+        function openGalleryModal() {
+            document.getElementById('galleryModal').classList.remove('hidden');
+            loadGallery();
+        }
+
+        function closeGalleryModal() {
+            document.getElementById('galleryModal').classList.add('hidden');
+        }
+
+        function openImageGeneratorModal() {
+            document.getElementById('imageGeneratorModal').classList.remove('hidden');
+        }
+
+        function closeImageGeneratorModal() {
+            document.getElementById('imageGeneratorModal').classList.add('hidden');
+        }
+
+        function openConversationsModal() {
+            document.getElementById('conversationsModal').classList.remove('hidden');
+            loadConversationsList();
+        }
+
+        function closeConversationsModal() {
+            document.getElementById('conversationsModal').classList.add('hidden');
+        }
+
+        // =====================
+        // CHARACTER CREATION STEPS
+        // =====================
+        const STEPS = [
+            { title: 'Choose Style', field: 'style' },
+            { title: 'Choose Language', field: 'language' },
+            { title: 'Appearance', field: 'appearance' },
+            { title: 'Personality', field: 'personality_traits' },
+            { title: 'Voice', field: 'voice' },
+            { title: 'Occupation', field: 'occupation' },
+            { title: 'Hobbies', field: 'hobbies' },
+            { title: 'Relationship', field: 'relationship_type' },
+            { title: 'Clothing Style', field: 'clothing_style' },
+            { title: 'Name & Tagline', field: 'name' },
+            { title: 'Bio', field: 'bio' },
+            { title: 'Backstory', field: 'backstory' },
+            { title: 'Unique Traits', field: 'unique_traits' },
+            { title: 'Greeting', field: 'greeting' },
+            { title: 'NSFW Preferences', field: 'nsfw_preferences' }
+        ];
+
+        const OPTIONS = {
+            style: ['realistic', 'anime'],
+            language: ['English', 'French', 'Spanish', 'German', 'Italian', 'Portuguese', 'Dutch', 'Polish', 'Swedish', 'Turkish', 'Russian', 'Japanese', 'Korean', 'Chinese', 'Arabic'],
+            ethnicity: ['Caucasian', 'Asian', 'Latina', 'African', 'Indian', 'Arab', 'Mixed'],
+            age_range: ['18-25', '25-30', '30-40', '40-50', '50+'],
+            body_type: ['Slim', 'Athletic', 'Average', 'Curvy', 'Petite', 'Tall'],
+            breast_size: ['Small', 'Medium', 'Large', 'Very large'],
+            butt_size: ['Small', 'Medium', 'Round', 'Large'],
+            hair_color: ['Blonde', 'Brown', 'Black', 'Red', 'Pink', 'Blue', 'Purple', 'White'],
+            hair_length: ['Short', 'Medium', 'Long', 'Very long'],
+            eye_color: ['Blue', 'Green', 'Brown', 'Black', 'Gray', 'Hazel'],
+            personality_traits: [
+                'Seductive', 'Shy', 'Dominant', 'Submissive', 'Caring', 'Playful',
+                'Mysterious', 'Confident', 'Intellectual', 'Flirty', 'Sarcastic', 'Romantic',
+                'Adventurous', 'Rebellious', 'Innocent', 'Passionate', 'Calm', 'Energetic'
+            ],
+            voice: ['Soft', 'Sensual', 'Energetic', 'Deep', 'Cute', 'Mature'],
+            occupation: [
+                'Model', 'Student', 'Nurse', 'Yoga instructor', 'Actress', 'Waitress',
+                'Secretary', 'Dancer', 'Influencer', 'Artist', 'Teacher', 'Fitness trainer'
+            ],
+            hobbies: [
+                'Fitness', 'Travel', 'Photography', 'Reading', 'Cooking', 'Dancing',
+                'Video games', 'Fashion', 'Yoga', 'Music', 'Art', 'Shopping'
+            ],
+            relationship_type: [
+                'Girlfriend', 'Lover', 'Friend with benefits', 'Colleague', 'Neighbor',
+                'Ex', 'Stranger', 'Sugar baby'
+            ],
+            clothing_style: [
+                'Casual sexy', 'Elegant', 'Sporty', 'Lingerie', 'Bikini',
+                'Evening wear', 'Casual', 'Gothic', 'Preppy'
+            ]
+        };
+
+        function renderStep() {
+            const step = STEPS[state.currentStep - 1];
+            document.getElementById('stepTitle').textContent = `Step ${state.currentStep}: ${step.title}`;
+
+            // Update progress dots
+            const dotsHtml = STEPS.map((_, i) => {
+                let className = 'step-dot';
+                if (i + 1 < state.currentStep) className += ' completed';
+                if (i + 1 === state.currentStep) className += ' active';
+                return `<div class="${className}"></div>`;
+            }).join('');
+            document.getElementById('stepsProgress').innerHTML = dotsHtml;
+
+            // Update buttons
+            document.getElementById('prevStepBtn').style.display = state.currentStep > 1 ? 'block' : 'none';
+            document.getElementById('nextStepBtn').textContent = state.currentStep === state.totalSteps ? 'Create' : 'Next';
+
+            // Render step content
+            const content = document.getElementById('stepContent');
+
+            switch (state.currentStep) {
+                case 1: // Style
+                    content.innerHTML = `
+                        <div class="style-options">
+                            <div class="style-option ${state.createCharacterData.style === 'realistic' ? 'selected' : ''}"
+                                 onclick="selectStyle('realistic')">
+                                <div class="style-icon">📷</div>
+                                <div class="style-name">Realistic</div>
+                            </div>
+                            <div class="style-option ${state.createCharacterData.style === 'anime' ? 'selected' : ''}"
+                                 onclick="selectStyle('anime')">
+                                <div class="style-icon">🎨</div>
+                                <div class="style-name">Anime</div>
+                            </div>
+                        </div>
+                    `;
+                    break;
+
+                case 2: // Language
+                    content.innerHTML = `
+                        <p style="color: var(--text-secondary); margin-bottom: 15px;">Choose the language your character will use in conversations</p>
+                        <div class="checkbox-group">
+                            ${OPTIONS.language.map(lang => `
+                                <label class="checkbox-item ${state.createCharacterData.language === lang.toLowerCase() ? 'selected' : ''}" onclick="selectLanguage('${lang.toLowerCase()}')">
+                                    ${lang}
+                                </label>
+                            `).join('')}
+                        </div>
+                    `;
+                    break;
+
+                case 3: // Appearance
+                    content.innerHTML = `
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Ethnicity</label>
+                                <select class="form-select" id="ethnicity" onchange="updateField('ethnicity', this.value)">
+                                    <option value="">Select...</option>
+                                    ${OPTIONS.ethnicity.map(o => `<option value="${o}" ${state.createCharacterData.ethnicity === o ? 'selected' : ''}>${o}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Age Range</label>
+                                <select class="form-select" id="age_range" onchange="updateField('age_range', this.value)">
+                                    <option value="">Select...</option>
+                                    ${OPTIONS.age_range.map(o => `<option value="${o}" ${state.createCharacterData.age_range === o ? 'selected' : ''}>${o}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Body Type</label>
+                                <select class="form-select" id="body_type" onchange="updateField('body_type', this.value)">
+                                    <option value="">Select...</option>
+                                    ${OPTIONS.body_type.map(o => `<option value="${o}" ${state.createCharacterData.body_type === o ? 'selected' : ''}>${o}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Breast Size</label>
+                                <select class="form-select" id="breast_size" onchange="updateField('breast_size', this.value)">
+                                    <option value="">Select...</option>
+                                    ${OPTIONS.breast_size.map(o => `<option value="${o}" ${state.createCharacterData.breast_size === o ? 'selected' : ''}>${o}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Butt Size</label>
+                                <select class="form-select" id="butt_size" onchange="updateField('butt_size', this.value)">
+                                    <option value="">Select...</option>
+                                    ${OPTIONS.butt_size.map(o => `<option value="${o}" ${state.createCharacterData.butt_size === o ? 'selected' : ''}>${o}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Eye Color</label>
+                                <select class="form-select" id="eye_color" onchange="updateField('eye_color', this.value)">
+                                    <option value="">Select...</option>
+                                    ${OPTIONS.eye_color.map(o => `<option value="${o}" ${state.createCharacterData.eye_color === o ? 'selected' : ''}>${o}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Hair Color</label>
+                                <select class="form-select" id="hair_color" onchange="updateField('hair_color', this.value)">
+                                    <option value="">Select...</option>
+                                    ${OPTIONS.hair_color.map(o => `<option value="${o}" ${state.createCharacterData.hair_color === o ? 'selected' : ''}>${o}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Hair Length</label>
+                                <select class="form-select" id="hair_length" onchange="updateField('hair_length', this.value)">
+                                    <option value="">Select...</option>
+                                    ${OPTIONS.hair_length.map(o => `<option value="${o}" ${state.createCharacterData.hair_length === o ? 'selected' : ''}>${o}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+                    `;
+                    break;
+
+                case 4: // Personality
+                    const selectedTraits = state.createCharacterData.personality_traits || [];
+                    content.innerHTML = `
+                        <p style="color: var(--text-secondary); margin-bottom: 15px;">Select multiple traits that define your character's personality</p>
+                        <div class="checkbox-group">
+                            ${OPTIONS.personality_traits.map(trait => `
+                                <label class="checkbox-item ${selectedTraits.includes(trait) ? 'selected' : ''}" onclick="toggleTrait('${trait}')">
+                                    ${trait}
+                                </label>
+                            `).join('')}
+                        </div>
+                    `;
+                    break;
+
+                case 5: // Voice
+                    content.innerHTML = renderSelectStep('voice', 'Voice Type', OPTIONS.voice);
+                    break;
+
+                case 6: // Occupation
+                    content.innerHTML = renderSelectStep('occupation', 'Occupation', OPTIONS.occupation);
+                    break;
+
+                case 7: // Hobbies
+                    const selectedHobbies = state.createCharacterData.hobbies || [];
+                    content.innerHTML = `
+                        <p style="color: var(--text-secondary); margin-bottom: 15px;">Select your character's hobbies and interests</p>
+                        <div class="checkbox-group">
+                            ${OPTIONS.hobbies.map(hobby => `
+                                <label class="checkbox-item ${selectedHobbies.includes(hobby) ? 'selected' : ''}" onclick="toggleHobby('${hobby}')">
+                                    ${hobby}
+                                </label>
+                            `).join('')}
+                        </div>
+                    `;
+                    break;
+
+                case 8: // Relationship
+                    content.innerHTML = renderSelectStep('relationship_type', 'Relationship Type', OPTIONS.relationship_type);
+                    break;
+
+                case 9: // Clothing
+                    content.innerHTML = renderSelectStep('clothing_style', 'Clothing Style', OPTIONS.clothing_style);
+                    break;
+
+                case 10: // Name & Tagline
+                    content.innerHTML = `
+                        <div class="form-group">
+                            <label class="form-label">Name *</label>
+                            <input type="text" class="form-input" id="name"
+                                   value="${state.createCharacterData.name || ''}"
+                                   onchange="updateField('name', this.value)"
+                                   placeholder="Enter character name" maxlength="100">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Tagline (max 100 characters)</label>
+                            <input type="text" class="form-input" id="tagline"
+                                   value="${state.createCharacterData.tagline || ''}"
+                                   onchange="updateField('tagline', this.value)"
+                                   oninput="updateCharCount(this, 100)"
+                                   placeholder="A short, catchy description" maxlength="100">
+                            <div class="char-count" id="tagline-count">0/100</div>
+                        </div>
+                    `;
+                    setTimeout(() => {
+                        const taglineInput = document.getElementById('tagline');
+                        if (taglineInput) updateCharCount(taglineInput, 100);
+                    }, 0);
+                    break;
+
+                case 11: // Bio
+                    content.innerHTML = renderTextareaStep('bio', 'Bio', 500, 'A brief description of who your character is');
+                    break;
+
+                case 12: // Backstory
+                    content.innerHTML = renderTextareaStep('backstory', 'Backstory', 1000, 'Your character\'s history and background');
+                    break;
+
+                case 13: // Unique Traits
+                    content.innerHTML = renderTextareaStep('unique_traits', 'Unique Traits', 500, 'Special quirks, expressions, or habits');
+                    break;
+
+                case 14: // Greeting
+                    content.innerHTML = renderTextareaStep('greeting', 'Greeting Message', 300, 'The first message your character will send');
+                    break;
+
+                case 15: // NSFW Preferences
+                    content.innerHTML = renderTextareaStep('nsfw_preferences', 'NSFW Preferences (Optional)', 500, 'Intimate preferences and boundaries');
+                    break;
+            }
+        }
+
+        function renderSelectStep(field, label, options) {
+            return `
+                <div class="form-group">
+                    <label class="form-label">${label}</label>
+                    <select class="form-select" id="${field}" onchange="updateField('${field}', this.value)">
+                        <option value="">Select...</option>
+                        ${options.map(o => `<option value="${o}" ${state.createCharacterData[field] === o ? 'selected' : ''}>${o}</option>`).join('')}
+                    </select>
+                </div>
+            `;
+        }
+
+        function renderTextareaStep(field, label, maxLength, placeholder) {
+            return `
+                <div class="form-group">
+                    <label class="form-label">${label} (max ${maxLength} characters)</label>
+                    <textarea class="form-textarea" id="${field}"
+                              onchange="updateField('${field}', this.value)"
+                              oninput="updateCharCount(this, ${maxLength})"
+                              placeholder="${placeholder}"
+                              maxlength="${maxLength}"
+                              rows="5">${state.createCharacterData[field] || ''}</textarea>
+                    <div class="char-count" id="${field}-count">0/${maxLength}</div>
+                </div>
+            `;
+        }
+
+        function selectStyle(style) {
+            state.createCharacterData.style = style;
+            renderStep();
+        }
+
+        function selectLanguage(language) {
+            state.createCharacterData.language = language;
+            renderStep();
+        }
+
+        function updateField(field, value) {
+            state.createCharacterData[field] = value;
+        }
+
+        function toggleTrait(trait) {
+            if (!state.createCharacterData.personality_traits) {
+                state.createCharacterData.personality_traits = [];
+            }
+
+            const index = state.createCharacterData.personality_traits.indexOf(trait);
+            if (index > -1) {
+                state.createCharacterData.personality_traits.splice(index, 1);
+            } else {
+                state.createCharacterData.personality_traits.push(trait);
+            }
+
+            renderStep();
+        }
+
+        function toggleHobby(hobby) {
+            if (!state.createCharacterData.hobbies) {
+                state.createCharacterData.hobbies = [];
+            }
+
+            const index = state.createCharacterData.hobbies.indexOf(hobby);
+            if (index > -1) {
+                state.createCharacterData.hobbies.splice(index, 1);
+            } else {
+                state.createCharacterData.hobbies.push(hobby);
+            }
+
+            renderStep();
+        }
+
+        function updateCharCount(element, max) {
+            const count = element.value.length;
+            const countEl = document.getElementById(`${element.id}-count`);
+            if (countEl) {
+                countEl.textContent = `${count}/${max}`;
+                countEl.className = 'char-count';
+                if (count > max * 0.9) countEl.className += ' warning';
+                if (count >= max) countEl.className += ' error';
+            }
+        }
+
+        function nextStep() {
+            // Validation for required steps
+            if (state.currentStep === 1 && !state.createCharacterData.style) {
+                alert('Please select a style');
+                return;
+            }
+
+            if (state.currentStep === 2 && !state.createCharacterData.language) {
+                alert('Please select a language');
+                return;
+            }
+
+            if (state.currentStep === 10 && !state.createCharacterData.name?.trim()) {
+                alert('Please enter a name');
+                return;
+            }
+
+            if (state.currentStep < state.totalSteps) {
+                // Save current step data
+                saveCurrentStepData();
+                state.currentStep++;
+                renderStep();
+            } else {
+                // Create character
+                saveCurrentStepData();
+                createCharacter(state.createCharacterData);
+            }
+        }
+
+        function prevStep() {
+            if (state.currentStep > 1) {
+                saveCurrentStepData();
+                state.currentStep--;
+                renderStep();
+            }
+        }
+
+        function saveCurrentStepData() {
+            // Save data from input fields that might not have triggered onchange
+            const inputs = document.querySelectorAll('#stepContent input, #stepContent select, #stepContent textarea');
+            inputs.forEach(input => {
+                if (input.id && input.value) {
+                    state.createCharacterData[input.id] = input.value;
+                }
+            });
+        }
+
+        // =====================
+        // UTILITY FUNCTIONS
+        // =====================
+        function escapeHtml(text) {
+            if (!text) return '';
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // =====================
+        // INITIALIZATION
+        // =====================
+        document.addEventListener('DOMContentLoaded', () => {
+            loadCharacters();
+
+            // Auto-resize textarea
+            const input = document.getElementById('messageInput');
+            input.addEventListener('input', function() {
+                this.style.height = 'auto';
+                this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+            });
+        });
+
+        // Close modals on escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeCreateCharacterModal();
+                closeGalleryModal();
+                closeImageGeneratorModal();
+                closeConversationsModal();
+                closeImageViewModal();
+            }
+        });
+
+        // Close modals on overlay click
+        document.querySelectorAll('.modal-overlay').forEach(overlay => {
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay && !overlay.id.includes('imageView')) {
+                    overlay.classList.add('hidden');
+                }
+            });
+        });
+    </script>
+</body>
+</html>
