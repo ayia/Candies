@@ -1,13 +1,28 @@
 """
-AGENT: IMAGE PROMPT GENERATOR (Enhanced v2.1)
-Purpose: Generate optimized image generation prompts using ImageRefiner
-Model: Fast model for structured output + Refiner for optimization
-Based on: https://arxiv.org/abs/2407.00247 (Prompt Refinement)
+AGENT: IMAGE PROMPT GENERATOR (Enhanced v3.0)
+Purpose: Generate optimized image generation prompts using Multi-Agent System
+Model: Fast model for structured output + Multi-Agent Pipeline for optimization
+
+Architecture:
+- IntentionAnalyzer: Extracts user intent, scene type, mood
+- CharacterContextBuilder: Builds character-specific visual context
+- PromptEngineer: Creates optimized prompts for Z-Image-Turbo/FLUX
+- ContentModerator: Adjusts NSFW level based on relationship
+- PromptValidator: Final validation and refinement
 """
 import json
 from typing import Dict, Any, Optional
 from .base import BaseAgent
 from .image_refiner import ImageRefinerAgent, PROMPT_TEMPLATES, BODY_PROMPTS, BREAST_PROMPTS, BUTT_PROMPTS
+
+# Import new multi-agent system
+try:
+    from services.image_prompt_agents import generate_image_prompt as multi_agent_generate
+    MULTI_AGENT_AVAILABLE = True
+    print("[ImageAgent] Multi-agent prompt system loaded")
+except ImportError as e:
+    MULTI_AGENT_AVAILABLE = False
+    print(f"[ImageAgent] Multi-agent system not available: {e}")
 
 
 class ImagePromptAgent(BaseAgent):
@@ -62,11 +77,66 @@ Output ONLY valid JSON."""
         self,
         character: Dict[str, Any],
         intent_data: Dict[str, Any],
-        user_request: str
+        user_request: str,
+        relationship_level: int = 0,
+        current_mood: str = "neutral",
+        conversation_context: str = ""
     ) -> Dict[str, Any]:
-        """Generate an optimized image prompt using the refiner"""
+        """
+        Generate an optimized image prompt using the multi-agent system.
 
-        # Use the ImageRefiner for better prompts
+        Pipeline:
+        1. Try new multi-agent system (5 specialized agents)
+        2. Fallback to ImageRefiner
+        3. Final fallback to LLM-based generation
+        """
+        nsfw_level = intent_data.get("nsfw_level", 0)
+
+        # PRIORITY 1: Use the new multi-agent prompt system
+        if MULTI_AGENT_AVAILABLE:
+            try:
+                print("[ImageAgent] Using multi-agent prompt system...")
+
+                # Build character data dict for agents
+                character_data = {
+                    "name": character.get("name", ""),
+                    "physical_traits": self._build_character_description(character),
+                    "personality": character.get("personality", "friendly"),
+                    "style": character.get("style", "realistic"),
+                    "age": character.get("age_range", "25-30"),
+                    "ethnicity": character.get("ethnicity", ""),
+                    "body_type": character.get("body_type", ""),
+                    "breast_size": character.get("breast_size", ""),
+                    "butt_size": character.get("butt_size", ""),
+                    "hair_color": character.get("hair_color", ""),
+                    "hair_length": character.get("hair_length", ""),
+                    "eye_color": character.get("eye_color", "")
+                }
+
+                result = await multi_agent_generate(
+                    user_message=user_request,
+                    character_data=character_data,
+                    relationship_level=relationship_level,
+                    current_mood=current_mood,
+                    conversation_context=conversation_context,
+                    style=character.get("style", "realistic")
+                )
+
+                if result and result.get("prompt"):
+                    print(f"[ImageAgent] Multi-agent success: {result['prompt'][:80]}...")
+                    return {
+                        "prompt": result["prompt"],
+                        "negative_prompt": result.get("negative_prompt", ""),
+                        "nsfw": result.get("is_nsfw", nsfw_level >= 1),
+                        "style": character.get("style", "realistic"),
+                        "steps": 8,  # Z-Image-Turbo optimal
+                        "guidance": 0.0,  # Z-Image-Turbo doesn't use guidance
+                        "metadata": result.get("metadata", {})
+                    }
+            except Exception as e:
+                print(f"[ImageAgent] Multi-agent error: {e}, trying refiner...")
+
+        # PRIORITY 2: Use the ImageRefiner
         try:
             refined = await self.refiner.refine_prompt(
                 character=character,
@@ -78,7 +148,7 @@ Output ONLY valid JSON."""
                 return {
                     "prompt": refined["prompt"],
                     "negative_prompt": refined.get("negative_prompt", self._get_negative_prompt(intent_data)),
-                    "nsfw": refined.get("is_nsfw", intent_data.get("nsfw_level", 0) >= 1),
+                    "nsfw": refined.get("is_nsfw", nsfw_level >= 1),
                     "style": character.get("style", "realistic"),
                     "steps": refined.get("recommended_steps", 30),
                     "guidance": refined.get("recommended_guidance", 7.0)
@@ -86,7 +156,7 @@ Output ONLY valid JSON."""
         except Exception as e:
             print(f"[ImageAgent] Refiner error: {e}, using LLM fallback")
 
-        # Fallback to LLM-based generation
+        # PRIORITY 3: Fallback to LLM-based generation
         return await self._llm_generate(character, intent_data, user_request)
 
     async def _llm_generate(

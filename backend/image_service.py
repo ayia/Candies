@@ -1,4 +1,4 @@
-"""Image Generation Service v6.0 - Z-Image-Turbo with NSFW Fallback"""
+"""Image Generation Service v7.0 - Z-Image-Turbo with Multi-Agent Prompt System"""
 import os
 import uuid
 import asyncio
@@ -12,14 +12,29 @@ from gradio_client import Client as GradioClient
 from config import settings
 
 
+# Import multi-agent prompt system
+try:
+    from services.image_prompt_agents import generate_image_prompt, image_prompt_orchestrator
+    AGENTS_AVAILABLE = True
+    print("[ImageService] Multi-agent prompt system loaded")
+except ImportError as e:
+    AGENTS_AVAILABLE = False
+    print(f"[ImageService] Multi-agent system not available: {e}")
+
+
 class ImageService:
     """
-    Image Service v6.0 - Hybrid Approach
+    Image Service v7.0 - Hybrid Approach with Multi-Agent Prompt System
 
     Strategy:
-    1. Z-Image-Turbo via fal-ai for SFW content (fast, high quality)
-    2. NSFW Z-Image-Turbo Spaces for explicit content
-    3. Pollinations as final fallback
+    1. Multi-agent system generates optimized prompts based on:
+       - User intention analysis
+       - Character personality and physical traits
+       - Relationship level and emotional context
+       - NSFW modulation
+    2. Z-Image-Turbo via fal-ai for SFW content (fast, high quality)
+    3. NSFW Z-Image-Turbo Spaces for explicit content
+    4. Pollinations as final fallback
 
     Z-Image-Turbo benefits:
     - #1 open-source model on Artificial Analysis leaderboard
@@ -524,6 +539,129 @@ class ImageService:
             img_seed = (seed + i * 1000) if seed is not None else None
             tasks.append(self.generate(prompt, style=style, seed=img_seed, **kwargs))
         return await asyncio.gather(*tasks, return_exceptions=True)
+
+    async def generate_with_agents(
+        self,
+        user_message: str,
+        character_data: Dict[str, Any],
+        relationship_level: int = 0,
+        current_mood: str = "neutral",
+        conversation_context: str = "",
+        style: str = "realistic",
+        width: int = 1024,
+        height: int = 1024,
+        seed: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """
+        Generate an image using the multi-agent prompt system.
+
+        This is the recommended method for generating character images as it:
+        1. Analyzes user intention to understand what they want
+        2. Builds character-specific context from their attributes
+        3. Engineers an optimized prompt for the image model
+        4. Moderates content based on relationship level
+        5. Validates and refines the final prompt
+
+        Args:
+            user_message: The user's message requesting an image
+            character_data: Dict with character info (name, physical_traits, personality, etc.)
+            relationship_level: 0-10 relationship level
+            current_mood: Character's current emotional state
+            conversation_context: Recent conversation for context
+            style: "realistic" or "anime"
+            width: Image width (512-2048)
+            height: Image height (512-2048)
+            seed: Optional seed for reproducibility
+
+        Returns:
+            Dict with:
+            - image_url: Generated image filename
+            - prompt_used: The prompt that was generated
+            - nsfw_level: Final NSFW level (0-5)
+            - metadata: Additional info about the generation
+        """
+        if not AGENTS_AVAILABLE:
+            # Fallback to basic prompt building
+            print("[ImageService] Agents not available, using basic prompt")
+            basic_prompt = self.build_prompt(
+                character=character_data,
+                custom=user_message,
+                nsfw_level=0
+            )
+            filename = await self.generate(
+                prompt=basic_prompt,
+                style=style,
+                width=width,
+                height=height,
+                seed=seed,
+                nsfw=False,
+                nsfw_level=0
+            )
+            return {
+                "image_url": filename,
+                "prompt_used": basic_prompt,
+                "nsfw_level": 0,
+                "metadata": {"fallback": True}
+            }
+
+        try:
+            # Use multi-agent system to generate optimized prompt
+            print("[ImageService] Using multi-agent prompt system...")
+            prompt_result = await generate_image_prompt(
+                user_message=user_message,
+                character_data=character_data,
+                relationship_level=relationship_level,
+                current_mood=current_mood,
+                conversation_context=conversation_context,
+                style=style
+            )
+
+            print(f"[ImageService] Agent-generated prompt: {prompt_result['prompt'][:100]}...")
+            print(f"[ImageService] NSFW level: {prompt_result['nsfw_level']}")
+
+            # Generate image with the optimized prompt
+            filename = await self.generate(
+                prompt=prompt_result["prompt"],
+                style=style,
+                negative_prompt=prompt_result.get("negative_prompt", ""),
+                width=width,
+                height=height,
+                seed=seed,
+                nsfw=prompt_result["is_nsfw"],
+                nsfw_level=prompt_result["nsfw_level"]
+            )
+
+            return {
+                "image_url": filename,
+                "prompt_used": prompt_result["prompt"],
+                "nsfw_level": prompt_result["nsfw_level"],
+                "is_nsfw": prompt_result["is_nsfw"],
+                "metadata": prompt_result.get("metadata", {})
+            }
+
+        except Exception as e:
+            print(f"[ImageService] Agent error, falling back to basic: {e}")
+            # Fallback to basic prompt
+            basic_prompt = self.build_prompt(
+                character=character_data,
+                custom=user_message,
+                nsfw_level=0
+            )
+            filename = await self.generate(
+                prompt=basic_prompt,
+                style=style,
+                width=width,
+                height=height,
+                seed=seed,
+                nsfw=False,
+                nsfw_level=0
+            )
+            return {
+                "image_url": filename,
+                "prompt_used": basic_prompt,
+                "nsfw_level": 0,
+                "metadata": {"fallback": True, "error": str(e)}
+            }
 
 
 # Global instance

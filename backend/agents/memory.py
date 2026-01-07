@@ -260,6 +260,68 @@ If no facts are relevant, respond with exactly: NONE"""
 
         return None
 
+    async def get_relationship_level(self, character_id: int) -> int:
+        """
+        Get the relationship level (0-10) for a character.
+        This is estimated from stored facts and relationship stage.
+        """
+        # Try to get from Redis first
+        key = f"casdy:relationship:{character_id}"
+        if self.redis_client:
+            try:
+                level = self.redis_client.get(key)
+                if level:
+                    return int(level)
+            except Exception:
+                pass
+
+        # Estimate from facts
+        facts = await self.load_facts(character_id)
+        if not facts:
+            return 0
+
+        # Check for relationship stage in facts
+        stage_levels = {
+            "stranger": 0,
+            "acquaintance": 1,
+            "casual_friend": 2,
+            "friend": 3,
+            "close_friend": 4,
+            "special_friend": 5,
+            "romantic_interest": 6,
+            "flirty": 6,
+            "dating": 7,
+            "romantic": 7,
+            "intimate": 8,
+            "lover": 9,
+            "soulmate": 10
+        }
+
+        # Estimate based on fact types and count
+        intimate_facts = sum(1 for f in facts if f.get("type") == "intimate")
+        personal_facts = sum(1 for f in facts if f.get("type") == "personal")
+        total_facts = len(facts)
+
+        # Base level on facts
+        estimated_level = 0
+        if total_facts > 0:
+            estimated_level = min(3, total_facts // 5)  # 1 level per 5 facts, max 3
+        if personal_facts > 2:
+            estimated_level = max(estimated_level, 3)
+        if intimate_facts > 0:
+            estimated_level = max(estimated_level, 5 + min(intimate_facts, 5))
+
+        return min(10, estimated_level)
+
+    async def save_relationship_level(self, character_id: int, level: int) -> None:
+        """Save the relationship level for a character"""
+        key = f"casdy:relationship:{character_id}"
+        if self.redis_client:
+            try:
+                self.redis_client.set(key, str(level), ex=86400 * 30)  # 30 days TTL
+            except Exception:
+                pass
+
     async def summarize_for_context(
         self,
         conversation: List[Dict[str, str]],

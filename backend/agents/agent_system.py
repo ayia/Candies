@@ -239,14 +239,35 @@ class AgentSystem:
 
         intent = intent_data.get("intent", "chat_only")
         if intent in ["image_request", "chat_with_image"]:
-            print("[AgentSystem] Step 4: Generating image prompt...")
+            print("[AgentSystem] Step 4: Generating image prompt with multi-agent system...")
             step_start = time.time()
 
             try:
+                # Build conversation context for the image agents
+                conv_context = ""
+                if conversation_history and len(conversation_history) > 0:
+                    recent = conversation_history[-4:]  # Last 4 messages
+                    conv_context = "\n".join([f"{m['role']}: {m['content'][:100]}" for m in recent])
+
+                # Get relationship level from memory if available
+                relationship_level = 0
+                if character_id:
+                    try:
+                        rel_state = await self.memory.get_relationship_level(character_id)
+                        relationship_level = rel_state if rel_state else 0
+                    except:
+                        pass
+
+                # Get current mood from intent
+                current_mood = intent_data.get("emotion", "neutral")
+
                 image_data = await self.image_agent.generate_image_prompt(
                     character=character,
                     intent_data=intent_data,
-                    user_request=message
+                    user_request=message,
+                    relationship_level=relationship_level,
+                    current_mood=current_mood,
+                    conversation_context=conv_context
                 )
                 image_prompt = image_data.get("prompt", "")
                 image_nsfw = image_data.get("nsfw", False)
