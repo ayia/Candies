@@ -1,46 +1,45 @@
-"""Image Generation Service v7.0 - Z-Image-Turbo with Multi-Agent Prompt System"""
+"""Image Generation Service v9.0 - Heartsync/Adult EXCLUSIVE"""
 import os
 import uuid
 import asyncio
 import shutil
-import requests
-import urllib.parse
+import sys
+import io
+import logging
 from datetime import datetime
 from typing import Optional, Dict, Any
-from huggingface_hub import InferenceClient
 from gradio_client import Client as GradioClient
 from config import settings
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]
+)
+logger = logging.getLogger("ImageService")
 
 # Import multi-agent prompt system
 try:
     from services.image_prompt_agents import generate_image_prompt, image_prompt_orchestrator
     AGENTS_AVAILABLE = True
-    print("[ImageService] Multi-agent prompt system loaded")
+    logger.info("Multi-agent prompt system loaded")
 except ImportError as e:
     AGENTS_AVAILABLE = False
-    print(f"[ImageService] Multi-agent system not available: {e}")
+    logger.warning(f"Multi-agent system not available: {e}")
 
 
 class ImageService:
     """
-    Image Service v7.0 - Hybrid Approach with Multi-Agent Prompt System
+    Image Service v9.0 - Heartsync/Adult EXCLUSIVE
 
-    Strategy:
-    1. Multi-agent system generates optimized prompts based on:
-       - User intention analysis
-       - Character personality and physical traits
-       - Relationship level and emotional context
-       - NSFW modulation
-    2. Z-Image-Turbo via fal-ai for SFW content (fast, high quality)
-    3. NSFW Z-Image-Turbo Spaces for explicit content
-    4. Pollinations as final fallback
+    Uses ONLY Heartsync/Adult Space on HuggingFace.
+    No fallback - Heartsync/Adult or nothing.
 
-    Z-Image-Turbo benefits:
-    - #1 open-source model on Artificial Analysis leaderboard
-    - Excellent photorealistic quality
-    - Works with detailed prompts
-    - 8 steps only (very fast)
+    Heartsync/Adult API:
+    - Endpoint: /generate_image
+    - Parameters: prompt, height, width, num_inference_steps, seed, randomize_seed, num_images
+    - Returns: Gallery of images + seed used
     """
 
     def __init__(self):
@@ -48,37 +47,20 @@ class ImageService:
         self.images_dir = settings.IMAGES_DIR
         os.makedirs(self.images_dir, exist_ok=True)
 
-        # Z-Image-Turbo via fal-ai (SFW only - they filter NSFW)
-        self.fal_client = InferenceClient(
-            provider="fal-ai",
-            api_key=self.token
-        )
-        self.z_image_model = "Tongyi-MAI/Z-Image-Turbo"
-
-        # NSFW Spaces using Z-Image-Turbo (try in order)
-        self.nsfw_spaces = [
-            {
-                "name": "yingzhac/Z_image_NSFW",
-                "api_name": "/generate_image",
-                "max_size": 2048,
-                "params": ["prompt", "negative", "height", "width", "steps", "guidance", "seed", "randomize"]
-            },
-            {
-                "name": "ClickyGPT/NSFW_Z-Image-Turbo",
-                "api_name": "/infer",
-                "max_size": 1024,
-                "params": ["prompt", "negative", "seed", "randomize", "width", "height", "guidance", "steps"]
-            }
-        ]
+        # Heartsync/Adult Space - EXCLUSIVE
+        self.space_name = "Heartsync/Adult"
+        self.api_endpoint = "/generate_image"
 
         # Quality settings
-        self.default_steps = 8
+        self.default_steps = 18  # Heartsync default
         self.default_width = 1024
         self.default_height = 1024
 
-        print(f"[ImageService] v6.0 Initialized - Z-Image-Turbo Hybrid")
-        print(f"[ImageService] SFW: fal-ai provider")
-        print(f"[ImageService] NSFW: {len(self.nsfw_spaces)} fallback spaces")
+        logger.info("=" * 50)
+        logger.info("v9.0 - Heartsync/Adult EXCLUSIVE")
+        logger.info(f"Space: {self.space_name}")
+        logger.info(f"Endpoint: {self.api_endpoint}")
+        logger.info("=" * 50)
 
     async def generate(
         self,
@@ -93,194 +75,108 @@ class ImageService:
         nsfw: bool = False,
         nsfw_level: int = 0
     ) -> str:
-        """Generate an image with intelligent provider selection"""
-
-        # Detect NSFW content
-        nsfw_keywords = ["nude", "naked", "topless", "nsfw", "xxx", "porn", "sex",
-                        "breast", "nipple", "pussy", "cock", "dick", "ass",
-                        "blowjob", "fellation", "sucer", "levrette", "doggy",
-                        "explicit", "uncensored", "bare"]
-        prompt_lower = prompt.lower()
-        is_nsfw = nsfw or nsfw_level >= 1 or any(kw in prompt_lower for kw in nsfw_keywords)
+        """Generate an image using Heartsync/Adult EXCLUSIVELY"""
 
         # Enhance prompt
         enhanced_prompt = self._enhance_prompt(prompt, nsfw_level, style)
 
-        # Clamp dimensions
+        # Clamp dimensions (Heartsync supports 512-2048)
         width = max(512, min(2048, width))
         height = max(512, min(2048, height))
         num_steps = steps or self.default_steps
 
-        print(f"[ImageService] NSFW: {is_nsfw}, Level: {nsfw_level}")
-        print(f"[ImageService] Prompt: {enhanced_prompt[:80]}...")
+        logger.info("=" * 50)
+        logger.info("Heartsync/Adult - Generation Starting")
+        logger.info(f"NSFW Level: {nsfw_level}")
+        logger.info(f"Size: {width}x{height}, Steps: {num_steps}")
+        logger.info(f"Prompt: {enhanced_prompt[:100]}...")
+        logger.info("=" * 50)
 
-        errors = []
-
-        if is_nsfw:
-            # NSFW: Try Z-Image-Turbo NSFW Spaces first
-            for space in self.nsfw_spaces:
-                try:
-                    print(f"[ImageService] Trying {space['name']}...")
-                    result = await self._generate_nsfw_space(
-                        space=space,
-                        prompt=enhanced_prompt,
-                        width=min(width, space["max_size"]),
-                        height=min(height, space["max_size"]),
-                        steps=num_steps,
-                        seed=seed
-                    )
-                    print(f"[ImageService] Success with {space['name']}")
-                    return result
-                except Exception as e:
-                    errors.append(f"{space['name']}: {e}")
-                    print(f"[ImageService] {space['name']} failed: {e}")
-
-            # Fallback to Pollinations for NSFW
-            print("[ImageService] Trying Pollinations fallback...")
-            try:
-                return await self._generate_pollinations(enhanced_prompt, width, height, seed)
-            except Exception as e:
-                errors.append(f"Pollinations: {e}")
-
-            raise Exception(f"All NSFW providers failed: {'; '.join(errors)}")
-
-        else:
-            # SFW: Use Z-Image-Turbo via fal-ai
-            try:
-                print("[ImageService] Using Z-Image-Turbo via fal-ai (SFW)...")
-                return await self._generate_fal_ai(enhanced_prompt, width, height, num_steps, seed)
-            except Exception as e:
-                errors.append(f"fal-ai: {e}")
-                print(f"[ImageService] fal-ai failed: {e}")
-
-                # Fallback to Pollinations for SFW too
-                try:
-                    return await self._generate_pollinations(enhanced_prompt, width, height, seed)
-                except Exception as e2:
-                    errors.append(f"Pollinations: {e2}")
-
-                raise Exception(f"All providers failed: {'; '.join(errors)}")
-
-    async def _generate_fal_ai(
-        self,
-        prompt: str,
-        width: int,
-        height: int,
-        steps: int,
-        seed: Optional[int]
-    ) -> str:
-        """Generate with Z-Image-Turbo via fal-ai (SFW only)"""
-        loop = asyncio.get_event_loop()
-
-        def _generate():
-            return self.fal_client.text_to_image(
-                prompt=prompt,
-                model=self.z_image_model,
+        try:
+            result = await self._generate_heartsync(
+                prompt=enhanced_prompt,
                 width=width,
                 height=height,
-                num_inference_steps=steps,
+                steps=num_steps,
                 seed=seed
             )
+            logger.info(f">>> SUCCESS with Heartsync/Adult")
+            return result
+        except Exception as e:
+            error_msg = str(e)
+            logger.error(f">>> Heartsync/Adult failed: {error_msg}")
+            raise Exception(f"Heartsync/Adult generation failed: {error_msg}")
 
-        image = await asyncio.wait_for(
-            loop.run_in_executor(None, _generate),
-            timeout=120
-        )
-
-        # Verify it's not a black/blocked image
-        if hasattr(image, 'size'):
-            # Check if image is mostly black (blocked)
-            import io
-            buffer = io.BytesIO()
-            image.save(buffer, format='PNG')
-            if buffer.tell() < 10000:  # Less than 10KB = probably blocked
-                raise Exception("Image blocked by content filter")
-
-        filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}.png"
-        filepath = os.path.join(self.images_dir, filename)
-        image.save(filepath, "PNG")
-
-        file_size = os.path.getsize(filepath)
-        print(f"[ImageService] fal-ai success: {filename} ({file_size} bytes)")
-
-        return filename
-
-    async def _generate_nsfw_space(
+    async def _generate_heartsync(
         self,
-        space: Dict,
         prompt: str,
         width: int,
         height: int,
         steps: int,
         seed: Optional[int]
     ) -> str:
-        """Generate with NSFW Z-Image-Turbo Space"""
+        """Generate with Heartsync/Adult Space"""
         loop = asyncio.get_event_loop()
 
         def _call_space():
-            import sys
-            import io
+            # Suppress Gradio output
             old_stdout = sys.stdout
+            old_stderr = sys.stderr
             sys.stdout = io.StringIO()
+            sys.stderr = io.StringIO()
             try:
-                client = GradioClient(space["name"])
+                client = GradioClient(self.space_name)
             finally:
                 sys.stdout = old_stdout
+                sys.stderr = old_stderr
 
-            api_name = space["api_name"]
-            params = space["params"]
-
-            # Build arguments based on space parameter order
-            if params[0] == "prompt":
-                if space["name"] == "yingzhac/Z_image_NSFW":
-                    # yingzhac: prompt, negative, height, width, steps, guidance, seed, randomize
-                    return client.predict(
-                        prompt,
-                        "",  # negative prompt (not used by Z-Image)
-                        height,
-                        width,
-                        steps,
-                        0.0,  # guidance (0 for turbo)
-                        seed if seed else 42,
-                        seed is None,  # randomize
-                        api_name=api_name
-                    )
-                else:
-                    # ClickyGPT: prompt, negative, seed, randomize, width, height, guidance, steps
-                    return client.predict(
-                        prompt,
-                        "",
-                        seed if seed else 42,
-                        seed is None,
-                        width,
-                        height,
-                        0.0,
-                        steps,
-                        api_name=api_name
-                    )
+            # Heartsync/Adult API:
+            # predict(prompt, height, width, num_inference_steps, seed, randomize_seed, num_images, api_name="/generate_image")
+            # Returns: (_generated_images, seed_used)
+            return client.predict(
+                prompt,                      # prompt (str, required)
+                height,                      # height (float, default: 1024)
+                width,                       # width (float, default: 1024)
+                steps,                       # num_inference_steps (float, default: 18)
+                seed if seed else 42,        # seed (float, default: 42)
+                seed is None,                # randomize_seed (bool, default: True)
+                1,                           # num_images (float, default: 2) - we only need 1
+                api_name=self.api_endpoint
+            )
 
         result = await asyncio.wait_for(
             loop.run_in_executor(None, _call_space),
             timeout=180
         )
 
-        # Parse result
+        # Parse result: (_generated_images, seed_used)
+        # _generated_images is a Gallery: list of dicts with 'image' key
         image_path = None
-        if isinstance(result, tuple):
+
+        if isinstance(result, tuple) and len(result) >= 1:
             gallery = result[0]
+            seed_used = result[1] if len(result) > 1 else None
+            logger.info(f">>> Seed used: {seed_used}")
+
             if isinstance(gallery, list) and len(gallery) > 0:
                 first = gallery[0]
                 if isinstance(first, dict):
-                    image_path = first.get('image') or first.get('path')
+                    # Gallery format: {'image': {'path': '...', 'url': '...', ...}, 'caption': None}
+                    image_data = first.get('image', {})
+                    if isinstance(image_data, dict):
+                        image_path = image_data.get('path')
+                    elif isinstance(image_data, str):
+                        image_path = image_data
                 elif isinstance(first, str):
                     image_path = first
-            elif isinstance(result[0], str):
-                image_path = result[0]
-        elif isinstance(result, str):
-            image_path = result
 
-        if not image_path or not os.path.exists(image_path):
+        if not image_path:
+            logger.error(f"Failed to extract image path from result: {type(result)}")
             raise Exception(f"No valid image in result: {type(result)}")
+
+        if not os.path.exists(image_path):
+            logger.error(f"Image file does not exist: {image_path}")
+            raise Exception(f"Image file not found: {image_path}")
 
         # Copy to our images folder
         ext = os.path.splitext(image_path)[1] or ".png"
@@ -289,66 +185,12 @@ class ImageService:
         shutil.copy(image_path, filepath)
 
         file_size = os.path.getsize(filepath)
-        print(f"[ImageService] Space success: {filename} ({file_size} bytes)")
+        logger.info(f">>> Heartsync/Adult SUCCESS: {filename} ({file_size} bytes)")
 
-        return filename
-
-    async def _generate_pollinations(
-        self,
-        prompt: str,
-        width: int,
-        height: int,
-        seed: Optional[int]
-    ) -> str:
-        """Generate with Pollinations.ai (free, supports NSFW)"""
-        encoded_prompt = urllib.parse.quote(prompt)
-        url = f"https://image.pollinations.ai/prompt/{encoded_prompt}"
-        params = [f"width={width}", f"height={height}", "nologo=true", "model=flux"]
-        if seed is not None:
-            params.append(f"seed={seed}")
-        url += "?" + "&".join(params)
-
-        loop = asyncio.get_event_loop()
-
-        def _fetch():
-            response = requests.get(url, timeout=180)
-            if response.status_code == 200:
-                # Return both content and content-type
-                content_type = response.headers.get('Content-Type', 'image/jpeg')
-                return response.content, content_type
-            raise Exception(f"HTTP {response.status_code}")
-
-        image_data, content_type = await asyncio.wait_for(
-            loop.run_in_executor(None, _fetch),
-            timeout=180
-        )
-
-        # Determine correct extension from content-type
-        if 'jpeg' in content_type or 'jpg' in content_type:
-            ext = '.jpg'
-        elif 'webp' in content_type:
-            ext = '.webp'
-        elif 'gif' in content_type:
-            ext = '.gif'
-        else:
-            ext = '.png'
-
-        filename = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:8]}{ext}"
-        filepath = os.path.join(self.images_dir, filename)
-
-        with open(filepath, 'wb') as f:
-            f.write(image_data)
-
-        file_size = os.path.getsize(filepath)
-        if file_size < 5000:
-            os.remove(filepath)
-            raise Exception(f"Image too small ({file_size} bytes)")
-
-        print(f"[ImageService] Pollinations success: {filename} ({file_size} bytes)")
         return filename
 
     def _enhance_prompt(self, prompt: str, nsfw_level: int, style: str) -> str:
-        """Enhance prompt for Z-Image-Turbo"""
+        """Enhance prompt for better image generation"""
         prompt_lower = prompt.lower()
 
         # Quality prefix
@@ -504,7 +346,7 @@ class ImageService:
         return ", ".join(parts)
 
     def build_negative_prompt(self, style: str = "realistic", nsfw_level: int = 0) -> str:
-        """Z-Image-Turbo doesn't use negative prompts"""
+        """Negative prompt (not used by Heartsync but kept for compatibility)"""
         return ""
 
     def get_character_seed(self, character_id: int) -> int:
@@ -552,37 +394,10 @@ class ImageService:
         height: int = 1024,
         seed: Optional[int] = None
     ) -> Dict[str, Any]:
-        """
-        Generate an image using the multi-agent prompt system.
+        """Generate an image using the multi-agent prompt system + Heartsync/Adult"""
 
-        This is the recommended method for generating character images as it:
-        1. Analyzes user intention to understand what they want
-        2. Builds character-specific context from their attributes
-        3. Engineers an optimized prompt for the image model
-        4. Moderates content based on relationship level
-        5. Validates and refines the final prompt
-
-        Args:
-            user_message: The user's message requesting an image
-            character_data: Dict with character info (name, physical_traits, personality, etc.)
-            relationship_level: 0-10 relationship level
-            current_mood: Character's current emotional state
-            conversation_context: Recent conversation for context
-            style: "realistic" or "anime"
-            width: Image width (512-2048)
-            height: Image height (512-2048)
-            seed: Optional seed for reproducibility
-
-        Returns:
-            Dict with:
-            - image_url: Generated image filename
-            - prompt_used: The prompt that was generated
-            - nsfw_level: Final NSFW level (0-5)
-            - metadata: Additional info about the generation
-        """
         if not AGENTS_AVAILABLE:
-            # Fallback to basic prompt building
-            print("[ImageService] Agents not available, using basic prompt")
+            logger.info("Agents not available, using basic prompt")
             basic_prompt = self.build_prompt(
                 character=character_data,
                 custom=user_message,
@@ -594,7 +409,6 @@ class ImageService:
                 width=width,
                 height=height,
                 seed=seed,
-                nsfw=False,
                 nsfw_level=0
             )
             return {
@@ -605,8 +419,7 @@ class ImageService:
             }
 
         try:
-            # Use multi-agent system to generate optimized prompt
-            print("[ImageService] Using multi-agent prompt system...")
+            logger.info("Using multi-agent prompt system...")
             prompt_result = await generate_image_prompt(
                 user_message=user_message,
                 character_data=character_data,
@@ -616,18 +429,15 @@ class ImageService:
                 style=style
             )
 
-            print(f"[ImageService] Agent-generated prompt: {prompt_result['prompt'][:100]}...")
-            print(f"[ImageService] NSFW level: {prompt_result['nsfw_level']}")
+            logger.info(f"Agent prompt: {prompt_result['prompt'][:100]}...")
+            logger.info(f"NSFW level: {prompt_result['nsfw_level']}")
 
-            # Generate image with the optimized prompt
             filename = await self.generate(
                 prompt=prompt_result["prompt"],
                 style=style,
-                negative_prompt=prompt_result.get("negative_prompt", ""),
                 width=width,
                 height=height,
                 seed=seed,
-                nsfw=prompt_result["is_nsfw"],
                 nsfw_level=prompt_result["nsfw_level"]
             )
 
@@ -640,28 +450,8 @@ class ImageService:
             }
 
         except Exception as e:
-            print(f"[ImageService] Agent error, falling back to basic: {e}")
-            # Fallback to basic prompt
-            basic_prompt = self.build_prompt(
-                character=character_data,
-                custom=user_message,
-                nsfw_level=0
-            )
-            filename = await self.generate(
-                prompt=basic_prompt,
-                style=style,
-                width=width,
-                height=height,
-                seed=seed,
-                nsfw=False,
-                nsfw_level=0
-            )
-            return {
-                "image_url": filename,
-                "prompt_used": basic_prompt,
-                "nsfw_level": 0,
-                "metadata": {"fallback": True, "error": str(e)}
-            }
+            logger.error(f"Agent error: {e}")
+            raise
 
 
 # Global instance
