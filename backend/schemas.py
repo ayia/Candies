@@ -11,7 +11,7 @@ class CharacterBase(BaseModel):
     style: str = Field(default="realistic", pattern="^(realistic|anime)$")
     language: str = Field(default="english")  # english, french, spanish, german, italian, etc.
 
-    # Appearance
+    # Appearance - Basic
     ethnicity: Optional[str] = None
     age_range: Optional[str] = None
     body_type: Optional[str] = None
@@ -20,6 +20,23 @@ class CharacterBase(BaseModel):
     hair_color: Optional[str] = None
     hair_length: Optional[str] = None
     eye_color: Optional[str] = None
+
+    # Appearance - Detailed Face
+    hair_style: Optional[str] = None  # "high bun", "ponytail", "loose waves"
+    face_shape: Optional[str] = None  # "oval", "round", "heart", "square"
+    lip_style: Optional[str] = None  # "full plump lips", "red lipstick"
+    nose_shape: Optional[str] = None  # "small straight", "button nose"
+    eyebrow_style: Optional[str] = None  # "arched dark brows", "thin brows"
+    skin_tone: Optional[str] = None  # "fair porcelain", "tan olive"
+    skin_details: Optional[str] = None  # "smooth flawless", "freckles"
+
+    # Appearance - Detailed Body
+    waist_type: Optional[str] = None  # "narrow waist", "thick waist"
+    hip_type: Optional[str] = None  # "wide hips", "narrow hips"
+    leg_type: Optional[str] = None  # "long legs", "thick thighs"
+
+    # CRITICAL: Custom physical description for Stable Diffusion prompts
+    physical_description: Optional[str] = Field(None, max_length=2000)
 
     # Attributes
     personality_traits: List[str] = Field(default_factory=list)
@@ -47,7 +64,7 @@ class CharacterUpdate(BaseModel):
     style: Optional[str] = Field(None, pattern="^(realistic|anime)$")
     language: Optional[str] = None
 
-    # Appearance
+    # Appearance - Basic
     ethnicity: Optional[str] = None
     age_range: Optional[str] = None
     body_type: Optional[str] = None
@@ -56,6 +73,23 @@ class CharacterUpdate(BaseModel):
     hair_color: Optional[str] = None
     hair_length: Optional[str] = None
     eye_color: Optional[str] = None
+
+    # Appearance - Detailed Face
+    hair_style: Optional[str] = None
+    face_shape: Optional[str] = None
+    lip_style: Optional[str] = None
+    nose_shape: Optional[str] = None
+    eyebrow_style: Optional[str] = None
+    skin_tone: Optional[str] = None
+    skin_details: Optional[str] = None
+
+    # Appearance - Detailed Body
+    waist_type: Optional[str] = None
+    hip_type: Optional[str] = None
+    leg_type: Optional[str] = None
+
+    # CRITICAL: Custom physical description for Stable Diffusion prompts
+    physical_description: Optional[str] = Field(None, max_length=2000)
 
     # Attributes
     personality_traits: Optional[List[str]] = None

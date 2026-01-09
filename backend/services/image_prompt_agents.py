@@ -306,8 +306,43 @@ class CharacterDescriptionAgent:
         )
 
     def build_description(self, character_data: Dict[str, Any]) -> CharacterDescription:
-        """Build EXACT character description from attributes - NO LLM interpretation"""
+        """Build EXACT character description from attributes - NO LLM interpretation
 
+        PRIORITY: If physical_description is provided, use it EXACTLY as the main prompt.
+        This ensures 100% consistency with the character's appearance.
+        """
+
+        # CRITICAL: If physical_description is set, use it as the PRIMARY source
+        # This is the most important field for character consistency
+        physical_description = character_data.get("physical_description")
+        if physical_description and physical_description.strip():
+            # Use the custom physical description directly
+            # This allows precise control over the character's appearance
+            logger.info(f"[CharacterDescriptionAgent] Using custom physical_description")
+
+            # Extract basic info for metadata
+            age = character_data.get("age_range") or "25-30"
+            ethnicity = (character_data.get("ethnicity") or "").lower()
+            hair_color = character_data.get("hair_color") or "brown"
+            hair_length = character_data.get("hair_length") or "long"
+            hair_style = character_data.get("hair_style") or ""
+            eye_color = character_data.get("eye_color") or "brown"
+
+            return CharacterDescription(
+                physical_prompt=physical_description.strip(),
+                age_description=f"{age} years old",
+                ethnicity_description=self.ETHNICITY_MAP.get(ethnicity, "woman"),
+                body_description=character_data.get("body_type", "attractive body"),
+                face_description=character_data.get("face_shape", "beautiful face"),
+                signature_elements=[
+                    f"{hair_style} {hair_color} hair" if hair_style else f"{hair_length} {hair_color} hair",
+                    f"{eye_color} eyes",
+                    character_data.get("lip_style", ""),
+                    ethnicity if ethnicity else "european"
+                ]
+            )
+
+        # FALLBACK: Build from individual fields if no physical_description
         parts = []
 
         # 1. Subject identifier
@@ -322,31 +357,78 @@ class CharacterDescriptionAgent:
         age = character_data.get("age_range") or character_data.get("age") or "25-30"
         parts.append(f"{age} years old, young adult woman")
 
-        # 4. Body type (EXACT mapping)
+        # 4. Skin tone and details (NEW)
+        skin_tone = character_data.get("skin_tone")
+        if skin_tone:
+            parts.append(f"{skin_tone} skin")
+        skin_details = character_data.get("skin_details")
+        if skin_details:
+            parts.append(skin_details)
+
+        # 5. Face shape (NEW)
+        face_shape = character_data.get("face_shape")
+        if face_shape:
+            parts.append(f"{face_shape} face")
+
+        # 6. Body type (EXACT mapping)
         body_type = (character_data.get("body_type") or "").lower()
         if body_type in self.BODY_TYPE_MAP:
             parts.append(self.BODY_TYPE_MAP[body_type])
 
-        # 5. Breast size (EXACT mapping)
+        # 7. Waist and hips (NEW)
+        waist_type = character_data.get("waist_type")
+        if waist_type:
+            parts.append(waist_type)
+        hip_type = character_data.get("hip_type")
+        if hip_type:
+            parts.append(hip_type)
+
+        # 8. Breast size (EXACT mapping)
         breast_size = (character_data.get("breast_size") or "").lower()
         if breast_size in self.BREAST_SIZE_MAP:
             parts.append(self.BREAST_SIZE_MAP[breast_size])
 
-        # 6. Butt size (EXACT mapping)
+        # 9. Butt size (EXACT mapping)
         butt_size = (character_data.get("butt_size") or "").lower()
         if butt_size in self.BUTT_SIZE_MAP:
             parts.append(self.BUTT_SIZE_MAP[butt_size])
 
-        # 7. Hair
+        # 10. Legs (NEW)
+        leg_type = character_data.get("leg_type")
+        if leg_type:
+            parts.append(leg_type)
+
+        # 11. Hair - with style (ENHANCED)
         hair_color = character_data.get("hair_color") or "brown"
         hair_length = character_data.get("hair_length") or "long"
-        parts.append(f"{hair_length} {hair_color} hair, silky hair, beautiful hair")
+        hair_style = character_data.get("hair_style") or ""
+        if hair_style:
+            parts.append(f"{hair_length} {hair_color} hair in {hair_style}, silky hair, beautiful hair")
+        else:
+            parts.append(f"{hair_length} {hair_color} hair, silky hair, beautiful hair")
 
-        # 8. Eyes
+        # 12. Eyes
         eye_color = character_data.get("eye_color") or "brown"
         parts.append(f"beautiful {eye_color} eyes, detailed eyes, expressive eyes")
 
-        # 9. Face
+        # 13. Eyebrows (NEW)
+        eyebrow_style = character_data.get("eyebrow_style")
+        if eyebrow_style:
+            parts.append(eyebrow_style)
+
+        # 14. Nose (NEW)
+        nose_shape = character_data.get("nose_shape")
+        if nose_shape:
+            parts.append(f"{nose_shape} nose")
+
+        # 15. Lips (NEW)
+        lip_style = character_data.get("lip_style")
+        if lip_style:
+            parts.append(lip_style)
+        else:
+            parts.append("beautiful lips")
+
+        # 16. Face quality
         parts.append("beautiful detailed face, perfect face, soft feminine features")
 
         return CharacterDescription(
@@ -354,10 +436,11 @@ class CharacterDescriptionAgent:
             age_description=f"{age} years old",
             ethnicity_description=self.ETHNICITY_MAP.get(ethnicity, "woman"),
             body_description=self.BODY_TYPE_MAP.get(body_type, "attractive body"),
-            face_description="beautiful face",
+            face_description=face_shape if face_shape else "beautiful face",
             signature_elements=[
-                f"{hair_length} {hair_color} hair",
+                f"{hair_style} {hair_color} hair" if hair_style else f"{hair_length} {hair_color} hair",
                 f"{eye_color} eyes",
+                lip_style if lip_style else "",
                 ethnicity if ethnicity else "european"
             ]
         )

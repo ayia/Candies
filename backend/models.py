@@ -13,7 +13,7 @@ class Character(Base):
     style = Column(String(20), default="realistic")
     language = Column(String(20), default="english")  # english, french, spanish, etc.
 
-    # Appearance
+    # Appearance - Basic
     ethnicity = Column(String(30))
     age_range = Column(String(20))
     body_type = Column(String(30))
@@ -22,6 +22,24 @@ class Character(Base):
     hair_color = Column(String(30))
     hair_length = Column(String(20))
     eye_color = Column(String(20))
+
+    # Appearance - Detailed Face
+    hair_style = Column(String(50))  # "high bun", "ponytail", "loose waves", etc.
+    face_shape = Column(String(30))  # "oval", "round", "heart", "square"
+    lip_style = Column(String(50))  # "full plump lips", "thin lips", "red lipstick"
+    nose_shape = Column(String(30))  # "small straight", "button nose", "aquiline"
+    eyebrow_style = Column(String(50))  # "arched dark brows", "thin brows"
+    skin_tone = Column(String(50))  # "fair porcelain", "tan olive", "dark ebony"
+    skin_details = Column(String(100))  # "smooth flawless", "freckles", "beauty mark"
+
+    # Appearance - Detailed Body
+    waist_type = Column(String(30))  # "narrow waist", "thick waist"
+    hip_type = Column(String(30))  # "wide hips", "narrow hips"
+    leg_type = Column(String(30))  # "long legs", "thick thighs"
+
+    # CRITICAL: Custom physical description for image generation
+    # This is the EXACT prompt used for Stable Diffusion - most important field!
+    physical_description = Column(Text)  # Full SD prompt for this character's appearance
 
     # Attributes
     personality_traits = Column(JSON, default=list)
