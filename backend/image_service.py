@@ -222,7 +222,7 @@ class ImageService:
             sys.stdout, sys.stderr = io.StringIO(), io.StringIO()
             try:
                 # Pass HF token for authentication - this gives us quota as authenticated user
-                client = GradioClient(space_name, token=hf_token)
+                client = GradioClient(space_name, hf_token=hf_token)
                 logger.info(f"[{space_name}] Connected with HF authentication")
             finally:
                 sys.stdout, sys.stderr = old_stdout, old_stderr
@@ -265,7 +265,7 @@ class ImageService:
             sys.stdout, sys.stderr = io.StringIO(), io.StringIO()
             try:
                 # Pass HF token for authentication
-                client = GradioClient(space_name, token=hf_token)
+                client = GradioClient(space_name, hf_token=hf_token)
                 logger.info(f"[{space_name}] Connected with HF authentication")
             finally:
                 sys.stdout, sys.stderr = old_stdout, old_stderr
@@ -309,7 +309,7 @@ class ImageService:
             sys.stdout, sys.stderr = io.StringIO(), io.StringIO()
             try:
                 # Pass HF token for authentication
-                client = GradioClient(space_name, token=hf_token)
+                client = GradioClient(space_name, hf_token=hf_token)
                 logger.info(f"[{space_name}] Connected with HF authentication")
             finally:
                 sys.stdout, sys.stderr = old_stdout, old_stderr

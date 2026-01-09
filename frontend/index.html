@@ -1024,7 +1024,7 @@
             isLoading: false,
             createCharacterData: {},
             currentStep: 1,
-            totalSteps: 15
+            totalSteps: 18
         };
 
         // =====================
@@ -1450,6 +1450,9 @@
             { title: 'Choose Style', field: 'style' },
             { title: 'Choose Language', field: 'language' },
             { title: 'Appearance', field: 'appearance' },
+            { title: 'Face Details', field: 'face_details' },
+            { title: 'Body Details', field: 'body_details' },
+            { title: 'Custom Description', field: 'physical_description' },
             { title: 'Personality', field: 'personality_traits' },
             { title: 'Voice', field: 'voice' },
             { title: 'Occupation', field: 'occupation' },
@@ -1475,6 +1478,17 @@
             hair_color: ['Blonde', 'Brown', 'Black', 'Red', 'Pink', 'Blue', 'Purple', 'White'],
             hair_length: ['Short', 'Medium', 'Long', 'Very long'],
             eye_color: ['Blue', 'Green', 'Brown', 'Black', 'Gray', 'Hazel'],
+            // NEW: Detailed appearance options
+            hair_style: ['Straight', 'Wavy', 'Curly', 'High bun', 'Ponytail', 'Braided', 'Loose waves', 'Bob cut', 'Pixie cut'],
+            face_shape: ['Oval', 'Round', 'Heart', 'Square', 'Diamond', 'Long'],
+            lip_style: ['Full plump lips', 'Thin lips', 'Natural lips', 'Red lipstick', 'Nude lipstick', 'Pink lipstick', 'Glossy lips'],
+            nose_shape: ['Small straight', 'Button nose', 'Aquiline', 'Wide nose', 'Roman nose'],
+            eyebrow_style: ['Arched dark brows', 'Thin brows', 'Thick brows', 'Natural brows', 'Defined brows'],
+            skin_tone: ['Fair porcelain', 'Light beige', 'Tan olive', 'Medium brown', 'Dark ebony', 'Golden bronze'],
+            skin_details: ['Smooth flawless', 'Natural freckles', 'Beauty mark', 'Dimples', 'Rosy cheeks'],
+            waist_type: ['Narrow waist', 'Average waist', 'Thick waist'],
+            hip_type: ['Narrow hips', 'Average hips', 'Wide hips', 'Curvy hips'],
+            leg_type: ['Long legs', 'Average legs', 'Short legs', 'Thick thighs', 'Athletic legs', 'Toned legs'],
             personality_traits: [
                 'Seductive', 'Shy', 'Dominant', 'Submissive', 'Caring', 'Playful',
                 'Mysterious', 'Confident', 'Intellectual', 'Flirty', 'Sarcastic', 'Romantic',
@@ -1619,7 +1633,122 @@
                     `;
                     break;
 
-                case 4: // Personality
+                case 4: // Face Details
+                    content.innerHTML = `
+                        <p style="color: var(--text-secondary); margin-bottom: 15px;">Add detailed facial features (optional)</p>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Hair Style</label>
+                                <select class="form-select" id="hair_style" onchange="updateField('hair_style', this.value)">
+                                    <option value="">Select...</option>
+                                    ${OPTIONS.hair_style.map(o => `<option value="${o}" ${state.createCharacterData.hair_style === o ? 'selected' : ''}>${o}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Face Shape</label>
+                                <select class="form-select" id="face_shape" onchange="updateField('face_shape', this.value)">
+                                    <option value="">Select...</option>
+                                    ${OPTIONS.face_shape.map(o => `<option value="${o}" ${state.createCharacterData.face_shape === o ? 'selected' : ''}>${o}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Lip Style</label>
+                                <select class="form-select" id="lip_style" onchange="updateField('lip_style', this.value)">
+                                    <option value="">Select...</option>
+                                    ${OPTIONS.lip_style.map(o => `<option value="${o}" ${state.createCharacterData.lip_style === o ? 'selected' : ''}>${o}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Nose Shape</label>
+                                <select class="form-select" id="nose_shape" onchange="updateField('nose_shape', this.value)">
+                                    <option value="">Select...</option>
+                                    ${OPTIONS.nose_shape.map(o => `<option value="${o}" ${state.createCharacterData.nose_shape === o ? 'selected' : ''}>${o}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Eyebrow Style</label>
+                                <select class="form-select" id="eyebrow_style" onchange="updateField('eyebrow_style', this.value)">
+                                    <option value="">Select...</option>
+                                    ${OPTIONS.eyebrow_style.map(o => `<option value="${o}" ${state.createCharacterData.eyebrow_style === o ? 'selected' : ''}>${o}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Skin Tone</label>
+                                <select class="form-select" id="skin_tone" onchange="updateField('skin_tone', this.value)">
+                                    <option value="">Select...</option>
+                                    ${OPTIONS.skin_tone.map(o => `<option value="${o}" ${state.createCharacterData.skin_tone === o ? 'selected' : ''}>${o}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Skin Details</label>
+                            <select class="form-select" id="skin_details" onchange="updateField('skin_details', this.value)">
+                                <option value="">Select...</option>
+                                ${OPTIONS.skin_details.map(o => `<option value="${o}" ${state.createCharacterData.skin_details === o ? 'selected' : ''}>${o}</option>`).join('')}
+                            </select>
+                        </div>
+                    `;
+                    break;
+
+                case 5: // Body Details
+                    content.innerHTML = `
+                        <p style="color: var(--text-secondary); margin-bottom: 15px;">Add detailed body features (optional)</p>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label">Waist Type</label>
+                                <select class="form-select" id="waist_type" onchange="updateField('waist_type', this.value)">
+                                    <option value="">Select...</option>
+                                    ${OPTIONS.waist_type.map(o => `<option value="${o}" ${state.createCharacterData.waist_type === o ? 'selected' : ''}>${o}</option>`).join('')}
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label">Hip Type</label>
+                                <select class="form-select" id="hip_type" onchange="updateField('hip_type', this.value)">
+                                    <option value="">Select...</option>
+                                    ${OPTIONS.hip_type.map(o => `<option value="${o}" ${state.createCharacterData.hip_type === o ? 'selected' : ''}>${o}</option>`).join('')}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Leg Type</label>
+                            <select class="form-select" id="leg_type" onchange="updateField('leg_type', this.value)">
+                                <option value="">Select...</option>
+                                ${OPTIONS.leg_type.map(o => `<option value="${o}" ${state.createCharacterData.leg_type === o ? 'selected' : ''}>${o}</option>`).join('')}
+                            </select>
+                        </div>
+                    `;
+                    break;
+
+                case 6: // Custom Physical Description
+                    content.innerHTML = `
+                        <div class="form-group">
+                            <label class="form-label">Custom Physical Description (PRIORITY)</label>
+                            <p style="color: var(--text-secondary); margin-bottom: 10px; font-size: 0.9em;">
+                                If you provide a custom description here, it will be used EXACTLY for image generation,
+                                overriding all the individual fields above. This gives you 100% control over the character's appearance.
+                            </p>
+                            <textarea class="form-input"
+                                      id="physical_description"
+                                      onchange="updateField('physical_description', this.value)"
+                                      oninput="updateCharCount(this, 2000)"
+                                      placeholder="Example: stunning 28 year old woman, exotic middle eastern beauty, piercing green eyes with long lashes, high cheekbones, full pouty lips with nude gloss, straight black hair cascading past shoulders, sun-kissed bronze skin with subtle freckles across nose, hourglass figure with narrow waist and wide hips, long graceful neck, elegant posture, confident expression, natural beauty, photorealistic"
+                                      maxlength="2000"
+                                      rows="8"
+                                      style="resize: vertical;">${state.createCharacterData.physical_description || ''}</textarea>
+                            <div class="char-count" id="physical_description-count">0/2000</div>
+                        </div>
+                    `;
+                    setTimeout(() => {
+                        const textarea = document.getElementById('physical_description');
+                        if (textarea) updateCharCount(textarea, 2000);
+                    }, 0);
+                    break;
+
+                case 7: // Personality
                     const selectedTraits = state.createCharacterData.personality_traits || [];
                     content.innerHTML = `
                         <p style="color: var(--text-secondary); margin-bottom: 15px;">Select multiple traits that define your character's personality</p>
@@ -1633,15 +1762,15 @@
                     `;
                     break;
 
-                case 5: // Voice
+                case 8: // Voice
                     content.innerHTML = renderSelectStep('voice', 'Voice Type', OPTIONS.voice);
                     break;
 
-                case 6: // Occupation
+                case 9: // Occupation
                     content.innerHTML = renderSelectStep('occupation', 'Occupation', OPTIONS.occupation);
                     break;
 
-                case 7: // Hobbies
+                case 10: // Hobbies
                     const selectedHobbies = state.createCharacterData.hobbies || [];
                     content.innerHTML = `
                         <p style="color: var(--text-secondary); margin-bottom: 15px;">Select your character's hobbies and interests</p>
@@ -1655,15 +1784,15 @@
                     `;
                     break;
 
-                case 8: // Relationship
+                case 11: // Relationship
                     content.innerHTML = renderSelectStep('relationship_type', 'Relationship Type', OPTIONS.relationship_type);
                     break;
 
-                case 9: // Clothing
+                case 12: // Clothing
                     content.innerHTML = renderSelectStep('clothing_style', 'Clothing Style', OPTIONS.clothing_style);
                     break;
 
-                case 10: // Name & Tagline
+                case 13: // Name & Tagline
                     content.innerHTML = `
                         <div class="form-group">
                             <label class="form-label">Name *</label>
@@ -1688,23 +1817,23 @@
                     }, 0);
                     break;
 
-                case 11: // Bio
+                case 14: // Bio
                     content.innerHTML = renderTextareaStep('bio', 'Bio', 500, 'A brief description of who your character is');
                     break;
 
-                case 12: // Backstory
+                case 15: // Backstory
                     content.innerHTML = renderTextareaStep('backstory', 'Backstory', 1000, 'Your character\'s history and background');
                     break;
 
-                case 13: // Unique Traits
+                case 16: // Unique Traits
                     content.innerHTML = renderTextareaStep('unique_traits', 'Unique Traits', 500, 'Special quirks, expressions, or habits');
                     break;
 
-                case 14: // Greeting
+                case 17: // Greeting
                     content.innerHTML = renderTextareaStep('greeting', 'Greeting Message', 300, 'The first message your character will send');
                     break;
 
-                case 15: // NSFW Preferences
+                case 18: // NSFW Preferences
                     content.innerHTML = renderTextareaStep('nsfw_preferences', 'NSFW Preferences (Optional)', 500, 'Intimate preferences and boundaries');
                     break;
             }
