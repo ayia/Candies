@@ -1,4 +1,4 @@
-"""Image Generation Service v9.0 - Heartsync/Adult EXCLUSIVE"""
+"""Image Generation Service v10.0 - Multi-Space with Retry & Fallback"""
 import os
 import uuid
 import asyncio
@@ -6,8 +6,9 @@ import shutil
 import sys
 import io
 import logging
+import time
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List, Tuple
 from gradio_client import Client as GradioClient
 from config import settings
 
@@ -29,17 +30,44 @@ except ImportError as e:
     logger.warning(f"Multi-agent system not available: {e}")
 
 
+# Available NSFW image generation spaces with their API configurations
+# Each space has DIFFERENT API endpoints and parameters!
+NSFW_SPACES = [
+    {
+        "name": "Heartsync/Adult",
+        "endpoint": "/generate_image",
+        "type": "adult",  # predict(prompt, height, width, steps, seed, randomize, num_images)
+        "default_steps": 18,
+        "priority": 1
+    },
+    {
+        "name": "Heartsync/NSFW-Uncensored-photo",
+        "endpoint": "/infer",
+        "type": "infer",  # predict(prompt, negative_prompt, seed, dimensions, guidance_scale, inference_steps)
+        "default_steps": 30,
+        "priority": 2
+    },
+    {
+        "name": "Heartsync/NSFW-image",
+        "endpoint": "/generate",
+        "type": "generate",  # predict(prompt, negative_prompt, steps, guidance, dimensions, num_samples)
+        "default_steps": 30,
+        "priority": 3
+    }
+]
+
+
 class ImageService:
     """
-    Image Service v9.0 - Heartsync/Adult EXCLUSIVE
+    Image Service v10.0 - Multi-Space with Retry & Fallback
 
-    Uses ONLY Heartsync/Adult Space on HuggingFace.
-    No fallback - Heartsync/Adult or nothing.
+    Primary: Heartsync/Adult
+    Fallbacks: Heartsync/NSFW-Uncensored-photo, Heartsync/NSFW-image
 
-    Heartsync/Adult API:
-    - Endpoint: /generate_image
-    - Parameters: prompt, height, width, num_inference_steps, seed, randomize_seed, num_images
-    - Returns: Gallery of images + seed used
+    Features:
+    - Automatic retry on quota exceeded
+    - Fallback to alternative Heartsync spaces
+    - Wait and retry option
     """
 
     def __init__(self):
@@ -47,19 +75,26 @@ class ImageService:
         self.images_dir = settings.IMAGES_DIR
         os.makedirs(self.images_dir, exist_ok=True)
 
-        # Heartsync/Adult Space - EXCLUSIVE
-        self.space_name = "Heartsync/Adult"
-        self.api_endpoint = "/generate_image"
+        # Available spaces sorted by priority
+        self.spaces = sorted(NSFW_SPACES, key=lambda x: x["priority"])
+        self.current_space_index = 0
+
+        # Retry settings
+        self.max_retries = 3
+        self.retry_delay = 5  # seconds between retries
+        self.quota_wait_time = 30  # seconds to wait if quota exceeded
 
         # Quality settings
-        self.default_steps = 18  # Heartsync default
+        self.default_steps = 18
         self.default_width = 1024
         self.default_height = 1024
 
         logger.info("=" * 50)
-        logger.info("v9.0 - Heartsync/Adult EXCLUSIVE")
-        logger.info(f"Space: {self.space_name}")
-        logger.info(f"Endpoint: {self.api_endpoint}")
+        logger.info("v10.1 - Multi-Space with HF Authentication")
+        logger.info(f"Primary: {self.spaces[0]['name']}")
+        logger.info(f"Fallbacks: {', '.join([s['name'] for s in self.spaces[1:]])}")
+        logger.info(f"HF Token: {'SET (' + self.token[:8] + '...)' if self.token else 'NOT SET!'}")
+        logger.info(f"Max retries: {self.max_retries}, Retry delay: {self.retry_delay}s")
         logger.info("=" * 50)
 
     async def generate(
@@ -75,108 +110,271 @@ class ImageService:
         nsfw: bool = False,
         nsfw_level: int = 0
     ) -> str:
-        """Generate an image using Heartsync/Adult EXCLUSIVELY"""
+        """Generate an image with retry and fallback to alternative spaces"""
 
         # Enhance prompt
         enhanced_prompt = self._enhance_prompt(prompt, nsfw_level, style)
 
-        # Clamp dimensions (Heartsync supports 512-2048)
+        # Clamp dimensions
         width = max(512, min(2048, width))
         height = max(512, min(2048, height))
-        num_steps = steps or self.default_steps
 
         logger.info("=" * 50)
-        logger.info("Heartsync/Adult - Generation Starting")
+        logger.info("Image Generation Starting (with retry & fallback)")
         logger.info(f"NSFW Level: {nsfw_level}")
-        logger.info(f"Size: {width}x{height}, Steps: {num_steps}")
+        logger.info(f"Size: {width}x{height}")
         logger.info(f"Prompt: {enhanced_prompt[:100]}...")
         logger.info("=" * 50)
 
-        try:
-            result = await self._generate_heartsync(
-                prompt=enhanced_prompt,
-                width=width,
-                height=height,
-                steps=num_steps,
-                seed=seed
-            )
-            logger.info(f">>> SUCCESS with Heartsync/Adult")
-            return result
-        except Exception as e:
-            error_msg = str(e)
-            logger.error(f">>> Heartsync/Adult failed: {error_msg}")
-            raise Exception(f"Heartsync/Adult generation failed: {error_msg}")
+        errors = []
 
-    async def _generate_heartsync(
+        # Try each space in priority order
+        for space_config in self.spaces:
+            space_name = space_config["name"]
+            num_steps = steps or space_config["default_steps"]
+
+            # Try with retries for each space
+            for attempt in range(self.max_retries):
+                try:
+                    logger.info(f"[Attempt {attempt + 1}/{self.max_retries}] Trying {space_name}...")
+
+                    result = await self._generate_with_space(
+                        space_config=space_config,
+                        prompt=enhanced_prompt,
+                        _negative_prompt=negative_prompt or "",
+                        width=width,
+                        height=height,
+                        steps=num_steps,
+                        seed=seed,
+                        _guidance=guidance or 7.0
+                    )
+
+                    logger.info(f">>> SUCCESS with {space_name}")
+                    return result
+
+                except Exception as e:
+                    error_msg = str(e)
+                    errors.append(f"{space_name} (attempt {attempt + 1}): {error_msg}")
+                    logger.warning(f">>> {space_name} failed: {error_msg}")
+
+                    # Check if quota exceeded - wait before retry
+                    if "quota" in error_msg.lower() or "exceeded" in error_msg.lower():
+                        if attempt < self.max_retries - 1:
+                            logger.info(f"Quota exceeded, waiting {self.retry_delay}s before retry...")
+                            await asyncio.sleep(self.retry_delay)
+                        else:
+                            logger.info(f"Quota exceeded on {space_name}, trying next space...")
+                            break  # Move to next space
+                    elif attempt < self.max_retries - 1:
+                        logger.info(f"Retrying in {self.retry_delay}s...")
+                        await asyncio.sleep(self.retry_delay)
+
+        # All spaces failed
+        error_summary = "\n".join(errors)
+        logger.error(f"All spaces failed:\n{error_summary}")
+        raise Exception(f"All image generation spaces failed. Errors:\n{error_summary}")
+
+    async def _generate_with_space(
         self,
+        space_config: Dict[str, Any],
+        prompt: str,
+        _negative_prompt: str,
+        width: int,
+        height: int,
+        steps: int,
+        seed: Optional[int],
+        _guidance: float
+    ) -> str:
+        """Generate image with a specific space - routes to the correct handler"""
+        space_name = space_config["name"]
+        space_type = space_config.get("type", "adult")
+
+        logger.info(f"Connecting to {space_name} (type: {space_type})...")
+
+        # Route to the correct handler based on space type
+        if space_type == "adult":
+            # Heartsync/Adult - /generate_image endpoint
+            return await self._generate_heartsync_adult(space_name, prompt, width, height, steps, seed)
+        elif space_type == "infer":
+            # Heartsync/NSFW-Uncensored-photo - /infer endpoint
+            return await self._generate_heartsync_infer(space_name, prompt, _negative_prompt, width, height, steps, seed, _guidance)
+        elif space_type == "generate":
+            # Heartsync/NSFW-image - /generate endpoint
+            return await self._generate_heartsync_generate(space_name, prompt, _negative_prompt, width, height, steps, seed, _guidance)
+        else:
+            raise Exception(f"Unknown space type: {space_type} for {space_name}")
+
+    async def _generate_heartsync_adult(
+        self,
+        space_name: str,
         prompt: str,
         width: int,
         height: int,
         steps: int,
         seed: Optional[int]
     ) -> str:
-        """Generate with Heartsync/Adult Space"""
+        """Generate with Heartsync/Adult - /generate_image endpoint"""
         loop = asyncio.get_event_loop()
+        hf_token = self.token  # Use HF token for authentication
 
         def _call_space():
-            # Suppress Gradio output
-            old_stdout = sys.stdout
-            old_stderr = sys.stderr
-            sys.stdout = io.StringIO()
-            sys.stderr = io.StringIO()
+            old_stdout, old_stderr = sys.stdout, sys.stderr
+            sys.stdout, sys.stderr = io.StringIO(), io.StringIO()
             try:
-                client = GradioClient(self.space_name)
+                # Pass HF token for authentication - this gives us quota as authenticated user
+                client = GradioClient(space_name, token=hf_token)
+                logger.info(f"[{space_name}] Connected with HF authentication")
             finally:
-                sys.stdout = old_stdout
-                sys.stderr = old_stderr
+                sys.stdout, sys.stderr = old_stdout, old_stderr
 
-            # Heartsync/Adult API:
-            # predict(prompt, height, width, num_inference_steps, seed, randomize_seed, num_images, api_name="/generate_image")
-            # Returns: (_generated_images, seed_used)
+            # API: predict(prompt, height, width, num_inference_steps, seed, randomize_seed, num_images)
             return client.predict(
-                prompt,                      # prompt (str, required)
-                height,                      # height (float, default: 1024)
-                width,                       # width (float, default: 1024)
-                steps,                       # num_inference_steps (float, default: 18)
-                seed if seed else 42,        # seed (float, default: 42)
-                seed is None,                # randomize_seed (bool, default: True)
-                1,                           # num_images (float, default: 2) - we only need 1
-                api_name=self.api_endpoint
+                prompt,
+                height,
+                width,
+                steps,
+                seed if seed else 42,
+                seed is None,
+                1,
+                api_name="/generate_image"
             )
 
         result = await asyncio.wait_for(
             loop.run_in_executor(None, _call_space),
             timeout=180
         )
+        return self._process_gradio_result(result, space_name)
 
-        # Parse result: (_generated_images, seed_used)
-        # _generated_images is a Gallery: list of dicts with 'image' key
+    async def _generate_heartsync_infer(
+        self,
+        space_name: str,
+        prompt: str,
+        negative_prompt: str,
+        width: int,
+        height: int,
+        steps: int,
+        seed: Optional[int],
+        guidance: float
+    ) -> str:
+        """Generate with Heartsync/NSFW-Uncensored-photo - /infer endpoint"""
+        loop = asyncio.get_event_loop()
+        hf_token = self.token  # Use HF token for authentication
+
+        def _call_space():
+            old_stdout, old_stderr = sys.stdout, sys.stderr
+            sys.stdout, sys.stderr = io.StringIO(), io.StringIO()
+            try:
+                # Pass HF token for authentication
+                client = GradioClient(space_name, token=hf_token)
+                logger.info(f"[{space_name}] Connected with HF authentication")
+            finally:
+                sys.stdout, sys.stderr = old_stdout, old_stderr
+
+            # API: predict(prompt, negative_prompt, seed, dimensions, guidance_scale, inference_steps)
+            # dimensions format: "WxH" string
+            dimensions = f"{width}x{height}"
+            return client.predict(
+                prompt,
+                negative_prompt or "",
+                seed if seed else 42,
+                dimensions,
+                guidance or 7.0,
+                steps,
+                api_name="/infer"
+            )
+
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, _call_space),
+            timeout=180
+        )
+        return self._process_gradio_result(result, space_name)
+
+    async def _generate_heartsync_generate(
+        self,
+        space_name: str,
+        prompt: str,
+        negative_prompt: str,
+        width: int,
+        height: int,
+        steps: int,
+        seed: Optional[int],
+        guidance: float
+    ) -> str:
+        """Generate with Heartsync/NSFW-image - /generate endpoint"""
+        loop = asyncio.get_event_loop()
+        hf_token = self.token  # Use HF token for authentication
+
+        def _call_space():
+            old_stdout, old_stderr = sys.stdout, sys.stderr
+            sys.stdout, sys.stderr = io.StringIO(), io.StringIO()
+            try:
+                # Pass HF token for authentication
+                client = GradioClient(space_name, token=hf_token)
+                logger.info(f"[{space_name}] Connected with HF authentication")
+            finally:
+                sys.stdout, sys.stderr = old_stdout, old_stderr
+
+            # API: predict(prompt, negative_prompt, inference_steps, guidance_scale, dimensions, num_samples)
+            dimensions = f"{width}x{height}"
+            return client.predict(
+                prompt,
+                negative_prompt or "",
+                steps,
+                guidance or 7.0,
+                dimensions,
+                1,  # num_samples
+                api_name="/generate"
+            )
+
+        result = await asyncio.wait_for(
+            loop.run_in_executor(None, _call_space),
+            timeout=180
+        )
+        return self._process_gradio_result(result, space_name)
+
+    def _process_gradio_result(self, result: Any, space_name: str) -> str:
+        """Process Gradio result and save image to disk"""
         image_path = None
 
-        if isinstance(result, tuple) and len(result) >= 1:
-            gallery = result[0]
-            seed_used = result[1] if len(result) > 1 else None
-            logger.info(f">>> Seed used: {seed_used}")
+        # Handle different result formats
+        if isinstance(result, tuple):
+            # Format: (image_path, seed) or (gallery, seed)
+            if len(result) >= 1:
+                first_item = result[0]
+                seed_used = result[1] if len(result) > 1 else None
+                logger.info(f">>> {space_name} seed used: {seed_used}")
 
-            if isinstance(gallery, list) and len(gallery) > 0:
-                first = gallery[0]
-                if isinstance(first, dict):
-                    # Gallery format: {'image': {'path': '...', 'url': '...', ...}, 'caption': None}
-                    image_data = first.get('image', {})
-                    if isinstance(image_data, dict):
-                        image_path = image_data.get('path')
-                    elif isinstance(image_data, str):
-                        image_path = image_data
-                elif isinstance(first, str):
-                    image_path = first
+                if isinstance(first_item, list) and len(first_item) > 0:
+                    # Gallery format
+                    gallery_item = first_item[0]
+                    if isinstance(gallery_item, dict):
+                        image_data = gallery_item.get('image', {})
+                        if isinstance(image_data, dict):
+                            image_path = image_data.get('path')
+                        elif isinstance(image_data, str):
+                            image_path = image_data
+                    elif isinstance(gallery_item, str):
+                        image_path = gallery_item
+                elif isinstance(first_item, str):
+                    # Direct path
+                    image_path = first_item
+                elif isinstance(first_item, dict):
+                    # Dict with path
+                    image_path = first_item.get('path') or first_item.get('image')
+        elif isinstance(result, str):
+            # Direct path string
+            image_path = result
+        elif isinstance(result, dict):
+            # Dict result
+            image_path = result.get('path') or result.get('image')
 
         if not image_path:
-            logger.error(f"Failed to extract image path from result: {type(result)}")
-            raise Exception(f"No valid image in result: {type(result)}")
+            logger.error(f"[{space_name}] Failed to extract image path from result: {type(result)}")
+            raise Exception(f"No valid image in result from {space_name}: {type(result)}")
 
         if not os.path.exists(image_path):
-            logger.error(f"Image file does not exist: {image_path}")
-            raise Exception(f"Image file not found: {image_path}")
+            logger.error(f"[{space_name}] Image file does not exist: {image_path}")
+            raise Exception(f"Image file not found from {space_name}: {image_path}")
 
         # Copy to our images folder
         ext = os.path.splitext(image_path)[1] or ".png"
@@ -185,51 +383,39 @@ class ImageService:
         shutil.copy(image_path, filepath)
 
         file_size = os.path.getsize(filepath)
-        logger.info(f">>> Heartsync/Adult SUCCESS: {filename} ({file_size} bytes)")
+        logger.info(f">>> {space_name} SUCCESS: {filename} ({file_size} bytes)")
 
         return filename
 
     def _enhance_prompt(self, prompt: str, nsfw_level: int, style: str) -> str:
-        """Enhance prompt for better image generation"""
+        """
+        Enhance prompt for better image generation.
+
+        NO HARDCODED KEYWORD DETECTION - the NSFW level is determined by the
+        multi-agent LLM system which understands context in any language.
+        """
         prompt_lower = prompt.lower()
 
-        # Quality prefix
+        # Quality prefix based on style
         if style == "anime":
             quality = "masterpiece, best quality, anime style, detailed illustration"
         else:
             quality = "masterpiece, best quality, ultra realistic, photorealistic, RAW photo, 8k uhd"
 
-        # Sexual acts enhancement
-        sexual_acts = {
-            "blowjob": "woman performing oral sex, blowjob, fellatio, sucking cock, penis in mouth",
-            "sucer": "woman performing oral sex, blowjob, fellatio, sucking cock",
-            "fellation": "woman giving oral sex, blowjob, fellatio, deepthroat",
-            "sex": "couple having sex, sexual intercourse, penetration",
-            "doggy": "doggy style position, rear entry, woman on all fours, from behind",
-            "levrette": "doggy style, rear entry sex, bent over",
-            "cowgirl": "cowgirl position, woman on top, riding",
-            "anal": "anal sex, anal penetration",
-            "masturbation": "woman masturbating, touching herself, fingering",
-            "cunnilingus": "cunnilingus, oral sex on woman, licking"
-        }
-
-        for keyword, enhancement in sexual_acts.items():
-            if keyword in prompt_lower:
-                prompt = f"{enhancement}, {prompt}"
-                nsfw_level = max(nsfw_level, 3)
-                break
-
-        # NSFW tags
-        if nsfw_level >= 3:
-            nsfw_tags = "nsfw, explicit, nude, naked, uncensored, fully nude, bare skin"
-            if "nude" not in prompt_lower:
-                prompt = f"{prompt}, completely nude, naked body, bare breasts, nipples visible"
-        elif nsfw_level >= 2:
+        # NSFW tags based on level (determined by multi-agent system, not hardcoded keywords)
+        if nsfw_level >= 4:
+            nsfw_tags = "nsfw, explicit, nude, naked, uncensored, fully nude, bare skin, exposed body"
+            # Ensure nudity is explicit in prompt
+            if "nude" not in prompt_lower and "naked" not in prompt_lower:
+                prompt = f"completely nude, naked body, bare breasts, nipples visible, {prompt}"
+        elif nsfw_level >= 3:
             nsfw_tags = "nsfw, nude, topless, bare breasts, uncensored"
-            if "nude" not in prompt_lower:
-                prompt = f"{prompt}, nude, topless"
+            if "nude" not in prompt_lower and "topless" not in prompt_lower:
+                prompt = f"topless, bare breasts, {prompt}"
+        elif nsfw_level >= 2:
+            nsfw_tags = "nsfw, revealing, sexy, sensual"
         elif nsfw_level >= 1:
-            nsfw_tags = "nsfw, sexy, seductive, sensual"
+            nsfw_tags = "sexy, seductive, sensual"
         else:
             nsfw_tags = ""
 

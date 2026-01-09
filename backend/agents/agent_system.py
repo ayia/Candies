@@ -236,6 +236,7 @@ class AgentSystem:
         image_prompt = None
         generate_image = False
         image_nsfw = False
+        image_nsfw_level = 0
 
         intent = intent_data.get("intent", "chat_only")
         if intent in ["image_request", "chat_with_image"]:
@@ -271,6 +272,8 @@ class AgentSystem:
                 )
                 image_prompt = image_data.get("prompt", "")
                 image_nsfw = image_data.get("nsfw", False)
+                # Get NSFW level from multi-agent system - this is the AUTHORITATIVE source
+                image_nsfw_level = image_data.get("nsfw_level", intent_data.get("nsfw_level", 0))
                 generate_image = bool(image_prompt)
 
                 step_duration = (time.time() - step_start) * 1000
@@ -321,6 +324,7 @@ class AgentSystem:
             "generate_image": generate_image,
             "image_prompt": image_prompt,
             "image_nsfw": image_nsfw,
+            "image_nsfw_level": image_nsfw_level,  # NSFW level from multi-agent system
             "intent": intent_data
         }
 

@@ -1,18 +1,19 @@
 """
-Image Prompt Multi-Agent System v1.0
+Image Prompt Multi-Agent System v2.0
 
-A multi-agent pipeline for generating high-quality image prompts adapted to:
-- User requests and intentions
-- Character personality and physical attributes
-- Relationship level and emotional context
-- NSFW modulation based on relationship progression
+A multi-agent pipeline for generating high-quality image prompts using
+3 GENERATION AGENTS + 1 VALIDATION AGENT with DIFFERENT LLMs.
 
-Agents:
-1. IntentionAnalyzer: Extracts user intent, scene type, mood
-2. CharacterContextBuilder: Builds character-specific context
-3. PromptEngineer: Creates optimized prompts for Z-Image-Turbo/FLUX
-4. ContentModerator: Adjusts NSFW level based on relationship
-5. PromptValidator: Final validation and refinement
+Architecture:
+1. IntentionAnalyzer (LLM 1 - Fast): Extracts user intent, NSFW level, mood
+2. CharacterDescriptionAgent (LLM 2 - Detail-focused): Builds exact character description
+3. PromptComposerAgent (LLM 3 - Creative): Creates the final optimized prompt
+4. PromptValidatorAgent (LLM 4 - Critical): Validates and refines the final prompt
+
+Key Principles:
+- NO hardcoded keyword detection - LLM agents analyze context naturally
+- Character attributes MUST be used EXACTLY as defined (no LLM interpretation)
+- NSFW level determined by LLM understanding of multilingual context
 """
 
 import asyncio
@@ -21,6 +22,9 @@ from dataclasses import dataclass
 from enum import Enum
 from huggingface_hub import InferenceClient
 from config import settings
+import logging
+
+logger = logging.getLogger("ImagePromptAgents")
 
 
 # ============================================================================
@@ -63,51 +67,42 @@ class IntentionResult:
 
 
 @dataclass
-class CharacterContext:
-    """Result from Character Context Builder"""
-    physical_description: str
-    personality_traits: List[str]
-    style_preferences: str
+class CharacterDescription:
+    """Exact character physical description from attributes"""
+    physical_prompt: str  # The exact prompt string for physical features
+    age_description: str
+    ethnicity_description: str
+    body_description: str
+    face_description: str
     signature_elements: List[str]
-    current_mood: str
-    relationship_stage: str
 
 
 @dataclass
-class GeneratedPrompt:
+class FinalPrompt:
     """Final generated prompt"""
     main_prompt: str
     negative_prompt: str
-    style_tags: List[str]
-    quality_tags: List[str]
     nsfw_level: int
     confidence_score: float
 
 
 # ============================================================================
-# LLM Client for Agents
+# LLM Clients - Different models for different agents
 # ============================================================================
 
 class AgentLLMClient:
-    """Lightweight LLM client for agent tasks using HuggingFace"""
+    """LLM client for a specific agent using HuggingFace"""
 
-    def __init__(self):
+    def __init__(self, provider: str, model: str, agent_name: str):
         self.token = settings.HF_API_TOKEN
-        # Use fast, capable models for agent tasks
-        self.models = [
-            ("novita", "meta-llama/Llama-3.1-8B-Instruct"),
-            ("hyperbolic", "meta-llama/Llama-3.1-8B-Instruct"),
-            ("together", "mistralai/Mistral-7B-Instruct-v0.3"),
-        ]
-        self.current_model_idx = 0
+        self.provider = provider
+        self.model = model
+        self.agent_name = agent_name
         self._init_client()
 
     def _init_client(self):
-        provider, model = self.models[self.current_model_idx]
-        self.client = InferenceClient(provider=provider, api_key=self.token)
-        self.model = model
-        self.provider = provider
-        print(f"[AgentLLM] Using {provider}/{model}")
+        self.client = InferenceClient(provider=self.provider, api_key=self.token)
+        logger.info(f"[{self.agent_name}] Initialized with {self.provider}/{self.model}")
 
     async def generate(self, system_prompt: str, user_prompt: str, max_tokens: int = 300) -> str:
         """Generate response from LLM"""
@@ -116,69 +111,94 @@ class AgentLLMClient:
             {"role": "user", "content": user_prompt}
         ]
 
-        for attempt in range(len(self.models)):
-            try:
-                loop = asyncio.get_event_loop()
-                response = await loop.run_in_executor(
-                    None,
-                    lambda: self.client.chat_completion(
-                        model=self.model,
-                        messages=messages,
-                        max_tokens=max_tokens,
-                        temperature=0.7,
-                        top_p=0.9
-                    )
+        try:
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.client.chat_completion(
+                    model=self.model,
+                    messages=messages,
+                    max_tokens=max_tokens,
+                    temperature=0.7,
+                    top_p=0.9
                 )
-                return response.choices[0].message.content.strip()
-
-            except Exception as e:
-                print(f"[AgentLLM] Error with {self.provider}: {e}")
-                self.current_model_idx = (self.current_model_idx + 1) % len(self.models)
-                self._init_client()
-
-        return ""
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            logger.error(f"[{self.agent_name}] Error: {e}")
+            return ""
 
 
 # ============================================================================
-# Agent 1: Intention Analyzer
+# Agent 1: Intention Analyzer (Fast LLM)
 # ============================================================================
 
 class IntentionAnalyzer:
-    """Analyzes user message to extract image generation intent"""
+    """Analyzes user message to extract image generation intent using LLM"""
 
-    SYSTEM_PROMPT = """You are an image request analyzer. Extract the user's intent for image generation.
+    SYSTEM_PROMPT = """You are an intelligent image request analyzer. Your job is to understand EXACTLY what the user wants.
+
+IMPORTANT RULES:
+1. Understand requests in ANY language (French, English, Spanish, etc.)
+2. Be PRECISE about what the user is asking - don't assume nudity unless explicitly requested
+3. Consider the CHARACTER CONTEXT provided - use it to enrich the scene
+4. "Sexy" does NOT mean "nude" - sexy can be clothed, seductive, teasing
 
 Respond in this EXACT format (one line per field):
-SCENE: [portrait/full_body/action/romantic/intimate/casual/artistic]
-MOOD: [happy/seductive/playful/shy/confident/romantic/passionate/cute/mysterious]
-SETTING: [brief setting description]
-CLOTHING: [clothing hint or "default"]
-POSE: [pose hint or "natural"]
+SCENE: [portrait/full_body/action/romantic/intimate/casual/artistic/professional]
+MOOD: [happy/seductive/playful/shy/confident/romantic/passionate/cute/mysterious/professional]
+SETTING: [DETAILED setting description based on character context and request]
+CLOTHING: [SPECIFIC clothing - be detailed! Examples: "tight grey business suit with white shirt", "black lace lingerie", "completely nude"]
+POSE: [specific pose with details]
 NSFW: [yes/no]
-NSFW_LEVEL: [0-5, where 0=SFW, 1=suggestive, 2=revealing, 3=sensual, 4=explicit, 5=very explicit]
-ELEMENTS: [comma-separated key visual elements]
+NSFW_LEVEL: [0-5] - BE CONSERVATIVE! Only high level if explicitly asked
+  0 = Safe for work, normal photo, casual outfit
+  1 = Suggestive, flirty, sexy but fully clothed (tight clothes, cleavage)
+  2 = Revealing: lingerie, bikini, underwear visible
+  3 = Topless, partial nudity, bare breasts
+  4 = Full frontal nudity, completely naked
+  5 = Very explicit sexual content
+ELEMENTS: [comma-separated visual elements from the request]
 
-Be concise. If not specified, use sensible defaults based on context."""
+CRITICAL EXAMPLES:
+- "photo de toi en prof sexy" -> NSFW_LEVEL: 1, CLOTHING: tight business suit, glasses, professional but sexy
+- "photo sexy dans ta classe" -> NSFW_LEVEL: 1-2, SETTING: classroom with chalkboard, CLOTHING: revealing professional outfit
+- "photo en lingerie" -> NSFW_LEVEL: 2, CLOTHING: lace lingerie, bra and panties
+- "photo nue" / "envoie moi nue" -> NSFW_LEVEL: 4, CLOTHING: completely nude, naked
+- "selfie" -> NSFW_LEVEL: 0, CLOTHING: casual everyday outfit
+- "photo sexy" (alone) -> NSFW_LEVEL: 1, CLOTHING: sexy revealing but clothed
 
-    def __init__(self, llm: AgentLLMClient):
-        self.llm = llm
+DO NOT default to nudity. Only NSFW_LEVEL 3-5 if user explicitly asks for nudity/topless/naked."""
 
-    async def analyze(self, user_message: str, conversation_context: str = "") -> IntentionResult:
+    def __init__(self):
+        # Use fast model for intent analysis
+        self.llm = AgentLLMClient(
+            provider="novita",
+            model="meta-llama/Llama-3.1-8B-Instruct",
+            agent_name="IntentionAnalyzer"
+        )
+
+    async def analyze(self, user_message: str, conversation_context: str = "", character_info: str = "") -> IntentionResult:
         """Analyze user intention for image generation"""
 
         user_prompt = f"""Analyze this image request:
 
 User message: "{user_message}"
-Conversation context: {conversation_context if conversation_context else "None"}
+{f'Character context: {character_info}' if character_info else ''}
+{f'Conversation context: {conversation_context}' if conversation_context else ''}
 
-Extract the image generation intent."""
+IMPORTANT: Be precise about NSFW level. Only use high levels (3-5) if nudity is EXPLICITLY requested.
+"Sexy" = clothed but seductive (level 1)
+"Lingerie/bikini" = revealing but not nude (level 2)
+"Topless" = partial nudity (level 3)
+"Nue/nude/naked" = full nudity (level 4)
 
-        response = await self.llm.generate(self.SYSTEM_PROMPT, user_prompt, max_tokens=200)
+What kind of image is the user asking for?"""
 
-        # Parse response
-        return self._parse_response(response, user_message)
+        response = await self.llm.generate(self.SYSTEM_PROMPT, user_prompt, max_tokens=250)
+        return self._parse_response(response)
 
-    def _parse_response(self, response: str, original_message: str) -> IntentionResult:
+    def _parse_response(self, response: str) -> IntentionResult:
         """Parse LLM response into IntentionResult"""
         lines = response.strip().split('\n')
         data = {}
@@ -213,37 +233,12 @@ Extract the image generation intent."""
 
         scene_str = data.get("SCENE", "portrait").lower()
         mood_str = data.get("MOOD", "happy").lower()
-
-        # Detect NSFW from original message if not explicitly set
-        # Extended keywords for French and English
-        nsfw_keywords_explicit = [
-            "nude", "naked", "nue", "nu", "topless", "seins", "breasts", "nipple",
-            "pussy", "chatte", "bite", "cock", "dick", "penis", "ass", "cul",
-            "sex", "sexe", "fuck", "baise", "suce", "blowjob", "fellation",
-            "explicit", "explicite", "porn", "porno"
-        ]
-        nsfw_keywords_suggestive = [
-            "sexy", "hot", "lingerie", "seduce", "seductrice", "seductive",
-            "sensuel", "sensual", "deshabill", "intime", "coquin", "coquine",
-            "revealing", "provocante", "aguicheuse", "string", "underwear"
-        ]
-
-        message_lower = original_message.lower()
-        has_explicit = any(kw in message_lower for kw in nsfw_keywords_explicit)
-        has_suggestive = any(kw in message_lower for kw in nsfw_keywords_suggestive)
-
-        nsfw_requested = data.get("NSFW", "no").lower() == "yes" or has_explicit or has_suggestive
+        nsfw_requested = data.get("NSFW", "no").lower() == "yes"
 
         try:
             nsfw_level = int(data.get("NSFW_LEVEL", "0"))
         except:
             nsfw_level = 0
-
-        # Auto-adjust NSFW level based on detected keywords
-        if has_explicit and nsfw_level < 4:
-            nsfw_level = 4  # Explicit content
-        elif has_suggestive and nsfw_level < 2:
-            nsfw_level = 2  # Suggestive content
 
         elements_str = data.get("ELEMENTS", "")
         elements = [e.strip() for e in elements_str.split(',') if e.strip()]
@@ -261,435 +256,331 @@ Extract the image generation intent."""
 
 
 # ============================================================================
-# Agent 2: Character Context Builder
+# Agent 2: Character Description Agent (Detail-focused LLM)
 # ============================================================================
 
-class CharacterContextBuilder:
-    """Builds character-specific context for image generation"""
+class CharacterDescriptionAgent:
+    """Builds EXACT character description from attributes - NO INTERPRETATION"""
 
-    SYSTEM_PROMPT = """You are a character context analyzer for image generation.
+    # Physical attribute maps - these are EXACT translations
+    ETHNICITY_MAP = {
+        "caucasian": "caucasian european woman, fair white skin",
+        "asian": "asian woman, asian features, asian beauty",
+        "latina": "latina hispanic woman, tan olive skin",
+        "african": "african black woman, dark ebony skin, african beauty",
+        "indian": "indian south asian woman, brown skin, indian beauty",
+        "arab": "arab middle eastern woman, olive skin, middle eastern features",
+        "mixed": "mixed race woman, exotic multiracial features"
+    }
 
-Given character data, create a concise visual description optimized for AI image generation.
+    BODY_TYPE_MAP = {
+        "slim": "slim slender body, thin waist, lean figure",
+        "athletic": "athletic toned body, fit physique, toned muscles",
+        "average": "average body type, natural proportions",
+        "curvy": "curvy voluptuous body, wide hips, hourglass figure",
+        "petite": "petite small frame, delicate body, short stature",
+        "tall": "tall statuesque body, long legs, elegant proportions",
+        "thick": "thick body, wide hips, full figure"
+    }
 
-Respond in this EXACT format:
-PHYSICAL: [detailed physical appearance in one line - hair, eyes, body type, skin]
-PERSONALITY_VISUAL: [how personality shows in appearance - expressions, posture]
-STYLE: [fashion/aesthetic style]
-SIGNATURE: [unique visual elements that identify this character]
-CURRENT_MOOD_VISUAL: [how current mood affects appearance]
+    BREAST_SIZE_MAP = {
+        "small": "small perky breasts, A cup, petite bust",
+        "medium": "medium natural breasts, B-C cup, proportionate bust",
+        "large": "large breasts, D cup, big natural bust",
+        "very large": "huge breasts, massive bust, F cup, very large chest"
+    }
 
-Be specific and visual. Use descriptive adjectives."""
+    BUTT_SIZE_MAP = {
+        "small": "small tight butt, petite rear",
+        "medium": "medium round butt, shapely rear",
+        "round": "round plump butt, bubble butt, curvy rear",
+        "large": "big round ass, wide hips, large butt, thick rear"
+    }
 
-    def __init__(self, llm: AgentLLMClient):
-        self.llm = llm
+    def __init__(self):
+        # Use detail-focused model
+        self.llm = AgentLLMClient(
+            provider="hyperbolic",
+            model="meta-llama/Llama-3.1-8B-Instruct",
+            agent_name="CharacterDescriptionAgent"
+        )
 
-    async def build_context(
-        self,
-        character_data: Dict[str, Any],
-        relationship_level: int = 0,
-        current_mood: str = "neutral"
-    ) -> CharacterContext:
-        """Build character visual context"""
+    def build_description(self, character_data: Dict[str, Any]) -> CharacterDescription:
+        """Build EXACT character description from attributes - NO LLM interpretation"""
 
-        user_prompt = f"""Build visual context for this character:
+        parts = []
 
-Name: {character_data.get('name', 'Unknown')}
-Physical traits: {character_data.get('physical_traits', 'not specified')}
-Personality: {character_data.get('personality', 'friendly')}
-Style: {character_data.get('style', 'casual')}
-Age appearance: {character_data.get('age', 'young adult')}
-Current mood: {current_mood}
-Relationship level with user: {relationship_level}/10
+        # 1. Subject identifier
+        parts.append("1girl, solo, single woman")
 
-Create the visual context."""
+        # 2. Ethnicity (EXACT mapping)
+        ethnicity = (character_data.get("ethnicity") or "").lower()
+        if ethnicity in self.ETHNICITY_MAP:
+            parts.append(self.ETHNICITY_MAP[ethnicity])
 
-        response = await self.llm.generate(self.SYSTEM_PROMPT, user_prompt, max_tokens=250)
+        # 3. Age
+        age = character_data.get("age_range") or character_data.get("age") or "25-30"
+        parts.append(f"{age} years old, young adult woman")
 
-        return self._parse_response(response, character_data, relationship_level, current_mood)
+        # 4. Body type (EXACT mapping)
+        body_type = (character_data.get("body_type") or "").lower()
+        if body_type in self.BODY_TYPE_MAP:
+            parts.append(self.BODY_TYPE_MAP[body_type])
 
-    def _parse_response(
-        self,
-        response: str,
-        character_data: Dict,
-        relationship_level: int,
-        current_mood: str
-    ) -> CharacterContext:
-        """Parse LLM response into CharacterContext"""
-        lines = response.strip().split('\n')
-        data = {}
+        # 5. Breast size (EXACT mapping)
+        breast_size = (character_data.get("breast_size") or "").lower()
+        if breast_size in self.BREAST_SIZE_MAP:
+            parts.append(self.BREAST_SIZE_MAP[breast_size])
 
-        for line in lines:
-            if ':' in line:
-                key, value = line.split(':', 1)
-                data[key.strip().upper()] = value.strip()
+        # 6. Butt size (EXACT mapping)
+        butt_size = (character_data.get("butt_size") or "").lower()
+        if butt_size in self.BUTT_SIZE_MAP:
+            parts.append(self.BUTT_SIZE_MAP[butt_size])
 
-        # Relationship stage mapping
-        stages = {
-            0: "stranger", 1: "acquaintance", 2: "casual_friend",
-            3: "friend", 4: "close_friend", 5: "special_friend",
-            6: "romantic_interest", 7: "dating", 8: "intimate",
-            9: "lover", 10: "soulmate"
-        }
+        # 7. Hair
+        hair_color = character_data.get("hair_color") or "brown"
+        hair_length = character_data.get("hair_length") or "long"
+        parts.append(f"{hair_length} {hair_color} hair, silky hair, beautiful hair")
 
-        # Extract personality traits
-        personality_str = data.get("PERSONALITY_VISUAL", character_data.get('personality', ''))
-        traits = [t.strip() for t in personality_str.split(',') if t.strip()][:5]
+        # 8. Eyes
+        eye_color = character_data.get("eye_color") or "brown"
+        parts.append(f"beautiful {eye_color} eyes, detailed eyes, expressive eyes")
 
-        # Extract signature elements
-        signature_str = data.get("SIGNATURE", "")
-        signatures = [s.strip() for s in signature_str.split(',') if s.strip()][:3]
+        # 9. Face
+        parts.append("beautiful detailed face, perfect face, soft feminine features")
 
-        return CharacterContext(
-            physical_description=data.get("PHYSICAL", character_data.get('physical_traits', 'beautiful woman')),
-            personality_traits=traits if traits else ["friendly", "approachable"],
-            style_preferences=data.get("STYLE", character_data.get('style', 'casual elegant')),
-            signature_elements=signatures if signatures else [],
-            current_mood=data.get("CURRENT_MOOD_VISUAL", current_mood),
-            relationship_stage=stages.get(relationship_level, "friend")
+        return CharacterDescription(
+            physical_prompt=", ".join(parts),
+            age_description=f"{age} years old",
+            ethnicity_description=self.ETHNICITY_MAP.get(ethnicity, "woman"),
+            body_description=self.BODY_TYPE_MAP.get(body_type, "attractive body"),
+            face_description="beautiful face",
+            signature_elements=[
+                f"{hair_length} {hair_color} hair",
+                f"{eye_color} eyes",
+                ethnicity if ethnicity else "european"
+            ]
         )
 
 
 # ============================================================================
-# Agent 3: Prompt Engineer
+# Agent 3: Prompt Composer Agent (Creative LLM)
 # ============================================================================
 
-class PromptEngineer:
-    """Creates optimized prompts for image generation models"""
+class PromptComposerAgent:
+    """Composes the final optimized prompt combining all elements"""
 
-    # Quality tags for different model types
-    QUALITY_TAGS_FLUX = [
-        "masterpiece", "best quality", "highly detailed",
-        "professional photography", "8k uhd", "sharp focus"
-    ]
+    SYSTEM_PROMPT = """You are an expert AI image prompt composer for Stable Diffusion and FLUX models.
 
-    QUALITY_TAGS_ANIME = [
-        "masterpiece", "best quality", "highly detailed",
-        "beautiful detailed eyes", "anime style", "vibrant colors"
-    ]
+Your job is to combine:
+1. A character's physical description (MUST be used EXACTLY as provided)
+2. Scene/mood/setting requirements
+3. CLOTHING (use EXACTLY what is specified - this is the user's choice!)
 
-    SYSTEM_PROMPT = """You are an expert AI image prompt engineer specializing in character portraits.
+OUTPUT FORMAT: Return ONLY the prompt text, nothing else.
 
-Create a prompt optimized for Z-Image-Turbo/FLUX models following these rules:
-1. Start with subject description (who)
-2. Add physical details (appearance)
-3. Include clothing/outfit
-4. Describe pose and expression
-5. Add setting/background
-6. Include lighting and atmosphere
-7. Add style descriptors
+RULES:
+1. ALWAYS start with the character's physical description EXACTLY as provided
+2. USE THE CLOTHING DESCRIPTION EXACTLY AS SPECIFIED - this is what the user wants!
+   - If "tight grey business suit" -> use that, NOT nude
+   - If "lingerie" -> use lingerie, NOT nude
+   - If "completely nude" -> then use nude
+3. Add the SETTING as described - be specific (classroom, bedroom, office, etc.)
+4. Add pose based on mood
+5. End with quality tags: "RAW photo, masterpiece, best quality, ultra realistic, 8k uhd"
 
-Format: Write as a flowing description, NOT comma-separated tags.
-Example: "A beautiful young woman with long flowing red hair and green eyes, wearing an elegant black dress, standing confidently with a gentle smile, in a cozy cafe with warm ambient lighting, soft bokeh background, professional portrait photography"
+CRITICAL:
+- Use EXACT physical description provided
+- Use EXACT clothing specified (DO NOT default to nude!)
+- Include DETAILED setting from the request"""
 
-Keep it under 200 words. Be specific and visual."""
+    def __init__(self):
+        # Use Llama-3.1 model on novita (Mistral-7B not available on HF router)
+        self.llm = AgentLLMClient(
+            provider="novita",
+            model="meta-llama/Llama-3.1-8B-Instruct",
+            agent_name="PromptComposerAgent"
+        )
 
-    def __init__(self, llm: AgentLLMClient):
-        self.llm = llm
-
-    async def create_prompt(
+    async def compose_prompt(
         self,
+        character_description: CharacterDescription,
         intention: IntentionResult,
-        character_context: CharacterContext,
-        style: str = "realistic"  # or "anime"
-    ) -> GeneratedPrompt:
-        """Create optimized image generation prompt"""
+        style: str = "realistic"
+    ) -> str:
+        """Compose the final image prompt"""
 
-        user_prompt = f"""Create an image generation prompt with these requirements:
+        # USE THE CLOTHING FROM INTENTION ANALYZER - respect what the user asked for!
+        # Only override to nude if NSFW level explicitly requires it AND clothing hint is vague
+        clothing_instruction = intention.clothing_hint
 
-CHARACTER:
-- Physical: {character_context.physical_description}
-- Style: {character_context.style_preferences}
-- Current mood: {character_context.current_mood}
-- Signature elements: {', '.join(character_context.signature_elements) if character_context.signature_elements else 'none'}
+        # Only force nudity if NSFW level is high AND clothing hint is generic/default
+        if clothing_instruction in ["default", "casual", "normal", "attractive clothing", ""]:
+            if intention.nsfw_level >= 4:
+                clothing_instruction = "completely nude, naked, full nudity, bare skin, no clothes"
+            elif intention.nsfw_level >= 3:
+                clothing_instruction = "topless, bare breasts, exposed chest"
+            elif intention.nsfw_level >= 2:
+                clothing_instruction = "sexy lingerie, lace bra and panties"
+            elif intention.nsfw_level >= 1:
+                clothing_instruction = "sexy revealing outfit, cleavage showing"
+            else:
+                clothing_instruction = "attractive casual clothing"
 
-SCENE REQUIREMENTS:
+        # Add NSFW tags if needed
+        nsfw_tags = ""
+        if intention.nsfw_level >= 3:
+            nsfw_tags = "nsfw, explicit, "
+        elif intention.nsfw_level >= 1:
+            nsfw_tags = "sensual, seductive, "
+
+        user_prompt = f"""Create an image generation prompt:
+
+CHARACTER (use EXACTLY as written):
+{character_description.physical_prompt}
+
+REQUIREMENTS:
 - Scene type: {intention.scene_type.value}
-- Mood/atmosphere: {intention.mood.value}
-- Setting: {intention.setting}
-- Clothing hint: {intention.clothing_hint}
+- Mood: {intention.mood.value}
+- SETTING (be specific!): {intention.setting}
+- CLOTHING (use EXACTLY): {clothing_instruction}
 - Pose: {intention.pose_hint}
-- Key elements to include: {', '.join(intention.key_elements) if intention.key_elements else 'none'}
+- Style: {style}
+- NSFW Level: {intention.nsfw_level}/5
+- Additional elements: {', '.join(intention.key_elements) if intention.key_elements else 'none'}
 
-NSFW Level: {intention.nsfw_level}/5 (0=SFW, 5=explicit)
-Style: {style}
+{nsfw_tags}Create the final prompt. Use the character description EXACTLY. Use the EXACT clothing specified.
+Include the setting details in the prompt."""
 
-Create the image prompt."""
+        response = await self.llm.generate(self.SYSTEM_PROMPT, user_prompt, max_tokens=500)
 
-        response = await self.llm.generate(self.SYSTEM_PROMPT, user_prompt, max_tokens=300)
-
-        # Clean and enhance the prompt
-        main_prompt = self._clean_prompt(response)
-
-        # Select quality tags based on style
-        quality_tags = self.QUALITY_TAGS_ANIME if style == "anime" else self.QUALITY_TAGS_FLUX
-
-        # Build negative prompt
-        negative_prompt = self._build_negative_prompt(intention.nsfw_level)
-
-        # Calculate confidence based on response quality
-        confidence = self._calculate_confidence(main_prompt, intention)
-
-        return GeneratedPrompt(
-            main_prompt=main_prompt,
-            negative_prompt=negative_prompt,
-            style_tags=[style, intention.mood.value],
-            quality_tags=quality_tags,
-            nsfw_level=intention.nsfw_level,
-            confidence_score=confidence
-        )
-
-    def _clean_prompt(self, response: str) -> str:
-        """Clean and format the prompt"""
-        # Remove any meta-commentary
+        # Clean the response
         prompt = response.strip()
-
-        # Remove quotes if present
         if prompt.startswith('"') and prompt.endswith('"'):
             prompt = prompt[1:-1]
 
-        # Remove common prefixes
-        prefixes_to_remove = [
-            "Here's the prompt:", "Prompt:", "Image prompt:",
-            "Here is the prompt:", "Generated prompt:"
-        ]
-        for prefix in prefixes_to_remove:
+        # Remove any meta-commentary
+        for prefix in ["Here's the prompt:", "Prompt:", "Here is", "Final prompt:"]:
             if prompt.lower().startswith(prefix.lower()):
                 prompt = prompt[len(prefix):].strip()
 
         return prompt
 
-    def _build_negative_prompt(self, nsfw_level: int) -> str:
-        """Build negative prompt based on content level"""
-        base_negative = [
-            "ugly", "deformed", "blurry", "bad anatomy",
-            "bad proportions", "extra limbs", "disfigured",
-            "out of frame", "watermark", "signature", "text"
-        ]
-
-        if nsfw_level < 3:
-            base_negative.extend(["nude", "naked", "nsfw", "explicit"])
-
-        return ", ".join(base_negative)
-
-    def _calculate_confidence(self, prompt: str, intention: IntentionResult) -> float:
-        """Calculate confidence score for the generated prompt"""
-        score = 0.5  # Base score
-
-        # Check for key elements presence
-        prompt_lower = prompt.lower()
-
-        # Physical description present
-        if any(word in prompt_lower for word in ["hair", "eyes", "woman", "girl", "man"]):
-            score += 0.1
-
-        # Setting present
-        if intention.setting.lower() in prompt_lower:
-            score += 0.1
-
-        # Mood indicators
-        mood_words = {
-            MoodType.HAPPY: ["smile", "happy", "cheerful", "bright"],
-            MoodType.SEDUCTIVE: ["seductive", "alluring", "sensual", "sultry"],
-            MoodType.PLAYFUL: ["playful", "teasing", "fun", "mischievous"],
-            MoodType.SHY: ["shy", "bashful", "timid", "blushing"],
-            MoodType.CONFIDENT: ["confident", "bold", "powerful", "strong"],
-            MoodType.ROMANTIC: ["romantic", "loving", "tender", "intimate"],
-            MoodType.PASSIONATE: ["passionate", "intense", "fiery", "burning"],
-            MoodType.CUTE: ["cute", "adorable", "sweet", "kawaii"],
-            MoodType.MYSTERIOUS: ["mysterious", "enigmatic", "dark", "shadow"]
-        }
-
-        if any(word in prompt_lower for word in mood_words.get(intention.mood, [])):
-            score += 0.1
-
-        # Length check (good prompts are detailed but not too long)
-        word_count = len(prompt.split())
-        if 30 <= word_count <= 150:
-            score += 0.1
-
-        # Clothing/pose mentioned
-        if intention.clothing_hint != "default" and intention.clothing_hint.lower() in prompt_lower:
-            score += 0.05
-
-        return min(1.0, score)
-
 
 # ============================================================================
-# Agent 4: Content Moderator
+# Agent 4: Prompt Validator Agent (Critical LLM)
 # ============================================================================
 
-class ContentModerator:
-    """Moderates content based on relationship level and platform rules"""
+class PromptValidatorAgent:
+    """Validates and refines the final prompt for quality and consistency"""
 
-    # NSFW allowance by relationship level
-    # NOTE: This is an adult platform, so NSFW is allowed at all levels
-    # The map is kept for potential future use with relationship progression
-    LEVEL_NSFW_MAP = {
-        0: 5,   # Stranger: Full NSFW allowed (adult platform)
-        1: 5,   # Acquaintance: Full NSFW allowed
-        2: 5,   # Casual friend: Full NSFW allowed
-        3: 5,   # Friend: Full NSFW allowed
-        4: 5,   # Close friend: Full NSFW allowed
-        5: 5,   # Special friend: Full NSFW allowed
-        6: 5,   # Romantic interest: Full NSFW allowed
-        7: 5,   # Dating: Full NSFW allowed
-        8: 5,   # Intimate: Full NSFW allowed
-        9: 5,   # Lover: Full NSFW allowed
-        10: 5   # Soulmate: Full NSFW allowed
-    }
+    SYSTEM_PROMPT = """You are a quality control agent for AI image prompts.
 
-    # Terms to moderate by level
-    NSFW_REPLACEMENTS = {
-        1: {  # Mild
-            "naked": "in revealing outfit",
-            "nude": "scantily clad",
-            "explicit": "suggestive"
-        },
-        2: {  # Suggestive
-            "naked": "in lingerie",
-            "nude": "partially undressed",
-        },
-        3: {  # Sensual
-            # Most terms allowed
-        }
-    }
+Your job is to verify and improve prompts while PRESERVING:
+1. The exact character physical description (hair, eyes, body, etc.)
+2. The requested NSFW level and nudity state
+3. The core scene requirements
 
-    def moderate(
-        self,
-        prompt: GeneratedPrompt,
-        relationship_level: int
-    ) -> GeneratedPrompt:
-        """Moderate prompt based on relationship level"""
+OUTPUT FORMAT: Return ONLY the improved prompt, nothing else.
 
-        max_allowed_nsfw = self.LEVEL_NSFW_MAP.get(relationship_level, 0)
+CHECKS:
+1. Is the character description complete and specific?
+2. Is the nudity/clothing state explicit enough for the NSFW level?
+3. Are quality tags present?
+4. Is the prompt well-structured for image generation?
 
-        # If requested NSFW exceeds allowed, adjust
-        if prompt.nsfw_level > max_allowed_nsfw:
-            moderated_prompt = self._downgrade_nsfw(
-                prompt.main_prompt,
-                prompt.nsfw_level,
-                max_allowed_nsfw
-            )
+If the prompt needs improvement, fix it. If it's good, return it as-is.
+NEVER remove character physical details. NEVER reduce the NSFW level.
 
-            return GeneratedPrompt(
-                main_prompt=moderated_prompt,
-                negative_prompt=prompt.negative_prompt,
-                style_tags=prompt.style_tags,
-                quality_tags=prompt.quality_tags,
-                nsfw_level=max_allowed_nsfw,
-                confidence_score=prompt.confidence_score * 0.9  # Slight penalty
-            )
+Add these quality prefixes if missing:
+- Realistic: "RAW photo, masterpiece, best quality, ultra realistic, photorealistic"
+- Anime: "masterpiece, best quality, highly detailed, anime style"
 
-        return prompt
+Add these quality suffixes if missing:
+"8k uhd, detailed skin texture, professional lighting, sharp focus\""""
 
-    def _downgrade_nsfw(self, prompt: str, current_level: int, target_level: int) -> str:
-        """Downgrade NSFW content to target level"""
-        result = prompt
-
-        # Apply replacements for each level we need to downgrade
-        for level in range(target_level + 1, current_level + 1):
-            replacements = self.NSFW_REPLACEMENTS.get(level, {})
-            for explicit, mild in replacements.items():
-                result = result.replace(explicit, mild)
-
-        # If target is SFW, ensure no explicit terms remain
-        if target_level == 0:
-            explicit_terms = [
-                "sexy", "seductive", "sensual", "revealing", "lingerie",
-                "naked", "nude", "explicit", "provocative"
-            ]
-            for term in explicit_terms:
-                result = result.replace(term, "elegant")
-
-        return result
-
-
-# ============================================================================
-# Agent 5: Prompt Validator
-# ============================================================================
-
-class PromptValidator:
-    """Validates and refines the final prompt"""
-
-    MIN_PROMPT_LENGTH = 50
-    MAX_PROMPT_LENGTH = 500
-
-    REQUIRED_ELEMENTS = [
-        "subject",  # Must describe a person/character
-        "appearance",  # Physical details
-    ]
-
-    def validate(self, prompt: GeneratedPrompt) -> GeneratedPrompt:
-        """Validate and refine the final prompt"""
-
-        main_prompt = prompt.main_prompt
-        issues = []
-
-        # Check length
-        if len(main_prompt) < self.MIN_PROMPT_LENGTH:
-            main_prompt = self._expand_prompt(main_prompt, prompt.quality_tags)
-            issues.append("expanded_short_prompt")
-
-        if len(main_prompt) > self.MAX_PROMPT_LENGTH:
-            main_prompt = self._truncate_prompt(main_prompt)
-            issues.append("truncated_long_prompt")
-
-        # Check for subject
-        if not self._has_subject(main_prompt):
-            main_prompt = "A beautiful woman, " + main_prompt
-            issues.append("added_subject")
-
-        # Add quality tags if not present
-        main_prompt = self._ensure_quality_tags(main_prompt, prompt.quality_tags)
-
-        # Calculate adjusted confidence
-        confidence = prompt.confidence_score
-        if issues:
-            confidence *= (1 - 0.05 * len(issues))
-
-        return GeneratedPrompt(
-            main_prompt=main_prompt,
-            negative_prompt=prompt.negative_prompt,
-            style_tags=prompt.style_tags,
-            quality_tags=prompt.quality_tags,
-            nsfw_level=prompt.nsfw_level,
-            confidence_score=max(0.3, confidence)
+    def __init__(self):
+        # Use critical/analytical model
+        self.llm = AgentLLMClient(
+            provider="novita",
+            model="Sao10K/L3-8B-Stheno-v3.2",
+            agent_name="PromptValidatorAgent"
         )
 
-    def _expand_prompt(self, prompt: str, quality_tags: List[str]) -> str:
-        """Expand a short prompt with quality descriptors"""
-        expansions = [
-            "detailed", "beautiful", "high quality",
-            "professional lighting", "sharp focus"
-        ]
-        return f"{prompt}, {', '.join(expansions[:3])}"
+    async def validate(
+        self,
+        prompt: str,
+        character_description: CharacterDescription,
+        intention: IntentionResult,
+        style: str = "realistic"
+    ) -> FinalPrompt:
+        """Validate and refine the final prompt"""
 
-    def _truncate_prompt(self, prompt: str) -> str:
-        """Truncate a long prompt while keeping coherence"""
-        # Keep first 450 characters, find last complete word
-        truncated = prompt[:450]
-        last_space = truncated.rfind(' ')
-        if last_space > 400:
-            truncated = truncated[:last_space]
-        return truncated
+        # Quality prefixes
+        if style == "anime":
+            quality_prefix = "masterpiece, best quality, highly detailed, anime style, vibrant colors"
+        else:
+            quality_prefix = "RAW photo, masterpiece, best quality, ultra realistic, photorealistic, 8k uhd"
 
-    def _has_subject(self, prompt: str) -> bool:
-        """Check if prompt has a clear subject"""
-        subject_words = [
-            "woman", "man", "girl", "boy", "person", "lady", "guy",
-            "she", "he", "character", "figure", "model"
-        ]
-        prompt_lower = prompt.lower()
-        return any(word in prompt_lower for word in subject_words)
+        quality_suffix = "detailed skin texture, professional lighting, sharp focus"
 
-    def _ensure_quality_tags(self, prompt: str, quality_tags: List[str]) -> str:
-        """Ensure quality tags are present"""
-        prompt_lower = prompt.lower()
-        missing_tags = [tag for tag in quality_tags[:3] if tag.lower() not in prompt_lower]
+        user_prompt = f"""Validate and improve this image prompt:
 
-        if missing_tags:
-            return f"{prompt}, {', '.join(missing_tags)}"
-        return prompt
+PROMPT TO VALIDATE:
+{prompt}
+
+REQUIRED CHARACTER ELEMENTS (must be in final prompt):
+{character_description.physical_prompt}
+
+REQUIRED NSFW LEVEL: {intention.nsfw_level}/5
+{"Must include nudity terms: nude, naked, bare skin, exposed" if intention.nsfw_level >= 3 else ""}
+{"Must include explicit nudity: completely nude, full nudity, naked body" if intention.nsfw_level >= 4 else ""}
+
+STYLE: {style}
+QUALITY PREFIX: {quality_prefix}
+QUALITY SUFFIX: {quality_suffix}
+
+Return the improved prompt."""
+
+        response = await self.llm.generate(self.SYSTEM_PROMPT, user_prompt, max_tokens=500)
+
+        final_prompt = response.strip()
+        if final_prompt.startswith('"') and final_prompt.endswith('"'):
+            final_prompt = final_prompt[1:-1]
+
+        # Ensure quality tags are present
+        if quality_prefix.split(',')[0].lower() not in final_prompt.lower():
+            final_prompt = f"{quality_prefix}, {final_prompt}"
+
+        if quality_suffix.split(',')[0].lower() not in final_prompt.lower():
+            final_prompt = f"{final_prompt}, {quality_suffix}"
+
+        # Force nudity for high NSFW levels
+        if intention.nsfw_level >= 4:
+            if "nude" not in final_prompt.lower() and "naked" not in final_prompt.lower():
+                final_prompt = f"nude, naked, completely nude, bare skin, no clothes, {final_prompt}"
+        elif intention.nsfw_level >= 3:
+            if "nude" not in final_prompt.lower() and "topless" not in final_prompt.lower():
+                final_prompt = f"topless, bare breasts, partial nudity, {final_prompt}"
+
+        # Build negative prompt
+        negative_prompt = "ugly, deformed, blurry, bad anatomy, bad proportions, extra limbs, disfigured, out of frame, watermark, signature, text"
+        if intention.nsfw_level < 3:
+            negative_prompt += ", nude, naked, nsfw, explicit"
+
+        # Calculate confidence
+        confidence = 0.8
+        if intention.nsfw_level >= 3 and ("nude" in final_prompt.lower() or "naked" in final_prompt.lower()):
+            confidence += 0.1
+        if character_description.signature_elements[0].lower() in final_prompt.lower():
+            confidence += 0.1
+
+        return FinalPrompt(
+            main_prompt=final_prompt,
+            negative_prompt=negative_prompt,
+            nsfw_level=intention.nsfw_level,
+            confidence_score=min(1.0, confidence)
+        )
 
 
 # ============================================================================
@@ -697,17 +588,19 @@ class PromptValidator:
 # ============================================================================
 
 class ImagePromptOrchestrator:
-    """Orchestrates the multi-agent pipeline for image prompt generation"""
+    """Orchestrates the 4-agent pipeline for image prompt generation"""
 
     def __init__(self):
-        self.llm = AgentLLMClient()
-        self.intention_analyzer = IntentionAnalyzer(self.llm)
-        self.context_builder = CharacterContextBuilder(self.llm)
-        self.prompt_engineer = PromptEngineer(self.llm)
-        self.content_moderator = ContentModerator()
-        self.validator = PromptValidator()
+        self.intention_analyzer = IntentionAnalyzer()
+        self.character_agent = CharacterDescriptionAgent()
+        self.composer_agent = PromptComposerAgent()
+        self.validator_agent = PromptValidatorAgent()
 
-        print("[ImagePromptOrchestrator] Multi-agent system initialized")
+        logger.info("[ImagePromptOrchestrator] 4-agent system initialized")
+        logger.info("  Agent 1 (Intent): novita/Llama-3.1-8B-Instruct")
+        logger.info("  Agent 2 (Character): EXACT attribute mapping (no LLM)")
+        logger.info("  Agent 3 (Composer): novita/Llama-3.1-8B-Instruct")
+        logger.info("  Agent 4 (Validator): novita/Sao10K/L3-8B-Stheno-v3.2")
 
     async def generate_prompt(
         self,
@@ -721,50 +614,50 @@ class ImagePromptOrchestrator:
         """
         Main pipeline: Generate optimized image prompt
 
-        Returns dict with:
-        - prompt: The main prompt string
-        - negative_prompt: Negative prompt string
-        - nsfw_level: Final NSFW level (0-5)
-        - metadata: Additional info about the generation
+        4-Agent Pipeline:
+        1. IntentionAnalyzer: Understands what user wants
+        2. CharacterDescriptionAgent: Builds EXACT character description
+        3. PromptComposerAgent: Creates the prompt
+        4. PromptValidatorAgent: Validates and refines
         """
 
-        print(f"[Orchestrator] Starting prompt generation for: {user_message[:50]}...")
+        logger.info(f"[Orchestrator] Starting 4-agent pipeline for: {user_message[:50]}...")
 
-        # Step 1: Analyze user intention
-        print("[Orchestrator] Step 1: Analyzing intention...")
-        intention = await self.intention_analyzer.analyze(
-            user_message,
-            conversation_context
-        )
-        print(f"  -> Scene: {intention.scene_type.value}, Mood: {intention.mood.value}, NSFW: {intention.nsfw_level}")
+        # Build character context string for intention analyzer
+        char_context = ""
+        if character_data:
+            char_name = character_data.get("name", "")
+            char_personality = character_data.get("personality", "")
+            char_context = f"Character: {char_name}. {char_personality[:100] if char_personality else ''}"
 
-        # Step 2: Build character context
-        print("[Orchestrator] Step 2: Building character context...")
-        character_context = await self.context_builder.build_context(
-            character_data,
-            relationship_level,
-            current_mood
-        )
-        print(f"  -> Physical: {character_context.physical_description[:50]}...")
+        # ========== AGENT 1: Analyze Intent ==========
+        logger.info("[Orchestrator] Agent 1: Analyzing intention...")
+        intention = await self.intention_analyzer.analyze(user_message, conversation_context, char_context)
+        logger.info(f"  -> Scene: {intention.scene_type.value}, NSFW: {intention.nsfw_level}, Clothing: {intention.clothing_hint[:50]}")
 
-        # Step 3: Engineer the prompt
-        print("[Orchestrator] Step 3: Engineering prompt...")
-        generated = await self.prompt_engineer.create_prompt(
+        # ========== AGENT 2: Build Character Description ==========
+        logger.info("[Orchestrator] Agent 2: Building character description...")
+        char_description = self.character_agent.build_description(character_data)
+        logger.info(f"  -> Physical: {char_description.physical_prompt[:80]}...")
+
+        # ========== AGENT 3: Compose Prompt ==========
+        logger.info("[Orchestrator] Agent 3: Composing prompt...")
+        raw_prompt = await self.composer_agent.compose_prompt(
+            char_description,
             intention,
-            character_context,
             style
         )
-        print(f"  -> Raw prompt length: {len(generated.main_prompt)} chars")
+        logger.info(f"  -> Raw: {raw_prompt[:80]}...")
 
-        # Step 4: Moderate content based on relationship
-        print(f"[Orchestrator] Step 4: Moderating (relationship level: {relationship_level})...")
-        moderated = self.content_moderator.moderate(generated, relationship_level)
-        print(f"  -> NSFW adjusted: {generated.nsfw_level} -> {moderated.nsfw_level}")
-
-        # Step 5: Validate and refine
-        print("[Orchestrator] Step 5: Validating...")
-        final = self.validator.validate(moderated)
-        print(f"  -> Final confidence: {final.confidence_score:.2f}")
+        # ========== AGENT 4: Validate & Refine ==========
+        logger.info("[Orchestrator] Agent 4: Validating prompt...")
+        final = await self.validator_agent.validate(
+            raw_prompt,
+            char_description,
+            intention,
+            style
+        )
+        logger.info(f"  -> Final confidence: {final.confidence_score:.2f}")
 
         result = {
             "prompt": final.main_prompt,
@@ -776,12 +669,11 @@ class ImagePromptOrchestrator:
                 "mood": intention.mood.value,
                 "style": style,
                 "confidence": final.confidence_score,
-                "relationship_stage": character_context.relationship_stage,
-                "quality_tags": final.quality_tags
+                "character_elements": char_description.signature_elements
             }
         }
 
-        print(f"[Orchestrator] Final prompt: {result['prompt'][:100]}...")
+        logger.info(f"[Orchestrator] FINAL PROMPT: {result['prompt'][:100]}...")
         return result
 
 
@@ -807,16 +699,11 @@ async def generate_image_prompt(
     """
     Convenience function for generating image prompts.
 
-    Args:
-        user_message: The user's message requesting an image
-        character_data: Dict with character info (name, physical_traits, personality, etc.)
-        relationship_level: 0-10 relationship level
-        current_mood: Character's current emotional state
-        conversation_context: Recent conversation for context
-        style: "realistic" or "anime"
-
-    Returns:
-        Dict with prompt, negative_prompt, nsfw_level, is_nsfw, metadata
+    Uses 4-agent pipeline:
+    1. IntentionAnalyzer (novita/Llama-3.1-8B)
+    2. CharacterDescriptionAgent (EXACT attribute mapping)
+    3. PromptComposerAgent (novita/Mistral-7B)
+    4. PromptValidatorAgent (novita/Sao10K/L3-8B-Stheno)
     """
     return await image_prompt_orchestrator.generate_prompt(
         user_message=user_message,

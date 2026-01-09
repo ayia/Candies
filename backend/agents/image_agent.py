@@ -123,11 +123,15 @@ Output ONLY valid JSON."""
                 )
 
                 if result and result.get("prompt"):
+                    # Get the NSFW level from the multi-agent result
+                    multi_agent_nsfw_level = result.get("nsfw_level", nsfw_level)
                     print(f"[ImageAgent] Multi-agent success: {result['prompt'][:80]}...")
+                    print(f"[ImageAgent] Multi-agent NSFW level: {multi_agent_nsfw_level}")
                     return {
                         "prompt": result["prompt"],
                         "negative_prompt": result.get("negative_prompt", ""),
-                        "nsfw": result.get("is_nsfw", nsfw_level >= 1),
+                        "nsfw": result.get("is_nsfw", multi_agent_nsfw_level >= 1),
+                        "nsfw_level": multi_agent_nsfw_level,  # Propagate the NSFW level!
                         "style": character.get("style", "realistic"),
                         "steps": 8,  # Z-Image-Turbo optimal
                         "guidance": 0.0,  # Z-Image-Turbo doesn't use guidance
