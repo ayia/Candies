@@ -156,48 +156,61 @@ SETTING: [DETAILED setting description based on character context and request]
 CLOTHING: [SPECIFIC clothing - be detailed! Examples: "tight grey business suit with white shirt", "black lace lingerie", "completely nude"]
 POSE: [specific pose with details]
 NSFW: [yes/no]
-NSFW_LEVEL: [0-5] - BE VERY CONSERVATIVE! Most requests are 0-1. Only use 3+ if nudity EXPLICITLY mentioned.
+NSFW_LEVEL: [0-5] - Detect the ACTUAL level based on keywords.
   0 = Safe for work (normal photo, casual clothes, bedroom reading, pajamas, shower with clothes)
   1 = Suggestive/flirty (sexy pose, tight dress, lingerie, bikini, seductive look, "sexy" keyword)
   2 = Revealing (underwear visible, very revealing lingerie, wet shirt showing body)
   3 = Topless (partial nudity, bare breasts, "topless" keyword)
   4 = Full nudity (completely naked, "nude/nue/naked" keywords, full body exposed)
-  5 = Very explicit sexual content (explicit poses, sexual acts)
+  5 = EXPLICIT SEXUAL ACTS (blowjob, fellatio, oral sex, handjob, sex acts, "fesant un blowjob", "sucking dick/cock", intercourse)
 ELEMENTS: [comma-separated visual elements from the request]
-OBJECTS: [comma-separated list - ONLY extract objects EXPLICITLY mentioned + these SPECIFIC inferences:
-  - EXPLICIT objects ONLY: lollipop, book, glasses, coffee, lingerie, bikini, dress, shirt, bed, etc.
-  - SPECIFIC inferences: "selfie"→phone, "mirror selfie"→phone+mirror
-  - DO NOT add extra contextual objects (no beach towels for bikini, no pillows for bed)
-  - DO NOT add meta-comments like "NONE (no specific...)" or "NSFW_LEVEL: X"
-  - Format: "object1, object2, object3" OR just "NONE" (nothing else!)]
-ACTION: [what character is doing - PRESERVE exact wording and modifiers from request:
-  - If "posing seductively" → write "posing seductively" (KEEP modifiers like seductively/sexily!)
-  - "avec X" → "holding X"
-  - "wearing X" → "wearing X"
-  - "en train de [verb]" → extract verb exactly
-  - "selfie" → "taking selfie"
-  - Default: "posing" ONLY if truly no action]
-LOCATION: [ONE WORD or short phrase - ABSOLUTELY NO explanations:
-  - Examples: "classroom", "bedroom", "office", "bathroom", "beach", "NONE"
-  - NEVER write: "NONE (private setting...)" or "unspecified location, possibly..."
-  - NEVER write: "bedroom (implied from context)"
-  - Just write: "bedroom" or "NONE" - that's it!]
+OBJECTS: [Extract objects/items EXPLICITLY mentioned or directly worn/held:
+  - Items held/used: lollipop, book, phone, glass, coffee, wine, camera, rose, umbrella
+  - Clothing WORN: lingerie, bikini, dress, shirt, pajamas, hat, sunglasses, necklace
+  - Furniture if EXPLICITLY stated: "au lit"→bed, "at desk"→desk
+  - Mandatory inference: "selfie"→phone, "mirror selfie"→phone+mirror
+  - DO NOT infer environmental objects (NO tables, chairs, saucers, menus, counters unless explicitly mentioned!)
+  - DO NOT add objects just because of location ("coffee shop" does NOT mean add table/chair/menu)
+  - Write "NONE" ONLY if absolutely nothing mentioned
+  - Format: "object1, object2" or "NONE"
+  - NEVER add comments, parentheses, or explanations like "NONE (not mentioned)" - just write "NONE"!]
+ACTION: [Extract EXACT action from request - be SPECIFIC:
+  - "en train de [verb]" → extract the verb (e.g., "sucking", "dancing", "reading")
+  - "[verb]ing" → extract the verb (e.g., "dancing", "laughing", "working out")
+  - "avec/with X" → "holding X"
+  - Location-based: "in bed"→"lying", "at gym"→"working out", "in kitchen"→"cooking"
+  - PRESERVE modifiers: "posing seductively" NOT just "posing"
+  - Be SPECIFIC: "sucking lollipop" NOT just "posing", "lying down" NOT just "posing"
+  - Default: "posing" ONLY if NO other action can be inferred]
+LOCATION: [ONE OR TWO WORDS MAXIMUM - ABSOLUTELY NO explanations or parentheses:
+  - Valid: "classroom", "bedroom", "office", "bathroom", "beach", "gym", "kitchen", "cafe", "NONE"
+  - Normalize: "coffee shop"→"cafe", "office desk"→"office", "at gym"→"gym"
+  - NEVER write: "NONE (private setting...)", "unspecified location, possibly...", "bedroom (implied)"
+  - NEVER write: "classroom with blackboard", "bathroom shower", "coffee shop", "indoor unspecified"
+  - Write ONLY ONE WORD: "classroom" OR "bathroom" OR "cafe" OR "NONE"
+  - If location mentioned: extract it. If not mentioned: write "NONE" - NO COMMENTS!]
 
-CRITICAL EXAMPLES (with ALL fixes applied):
-- "photo de toi en train de sucer une sucette" → OBJECTS: colorful lollipop candy, ACTION: sucking lollipop with tongue visible, NSFW_LEVEL: 1
-- "photo de toi en prof sexy dans ta classe" → LOCATION: classroom with blackboard, OBJECTS: glasses, teacher desk, blackboard, ACTION: standing confidently, CLOTHING: tight business suit, NSFW_LEVEL: 1
-- "envoie moi une photo sexy en lingerie" → OBJECTS: lingerie, CLOTHING: lace lingerie, ACTION: posing seductively, NSFW_LEVEL: 1
-- "photo nue dans ton lit" → NSFW_LEVEL: 4, CLOTHING: completely nude, LOCATION: bedroom, OBJECTS: bed with sheets, ACTION: posing
-- "selfie avec ton café" → OBJECTS: coffee mug, phone, ACTION: holding mug, taking selfie, NSFW_LEVEL: 0
+CRITICAL EXAMPLES (ITERATION 4 - NO over-inference, SPECIFIC actions):
+- "photo de toi en train de sucer une sucette" → OBJECTS: lollipop, ACTION: sucking lollipop, NSFW_LEVEL: 1
+- "photo de toi en prof sexy dans ta classe" → OBJECTS: glasses, desk, blackboard, LOCATION: classroom, ACTION: standing confidently, NSFW_LEVEL: 1
+- "envoie moi une photo sexy en lingerie" → OBJECTS: lingerie, ACTION: posing seductively, NSFW_LEVEL: 1
+- "photo nue dans ton lit" → OBJECTS: bed, LOCATION: bedroom, CLOTHING: completely nude, ACTION: lying, NSFW_LEVEL: 4
+- "selfie avec ton café" → OBJECTS: coffee, phone, ACTION: holding coffee, NSFW_LEVEL: 0
 - "bathroom mirror selfie" → OBJECTS: phone, mirror, LOCATION: bathroom, ACTION: taking selfie, NSFW_LEVEL: 0
-- "photo in a tight dress" → OBJECTS: tight dress, CLOTHING: tight dress, ACTION: posing, NSFW_LEVEL: 1
-- "photo de toi dans ta chambre au lit" → LOCATION: bedroom, OBJECTS: bed, ACTION: posing or lying, NSFW_LEVEL: 0 (NO nudity mentioned!)
-- "show me in a tiny bikini" → OBJECTS: bikini, CLOTHING: tiny bikini, ACTION: posing, NSFW_LEVEL: 1
+- "photo in a tight dress" → OBJECTS: dress, ACTION: posing, NSFW_LEVEL: 1
+- "photo de toi dans ta chambre au lit" → OBJECTS: bed, LOCATION: bedroom, ACTION: lying, NSFW_LEVEL: 0
+- "show me in a tiny bikini" → OBJECTS: bikini, ACTION: posing, NSFW_LEVEL: 1
+- "Coffee shop photo with a latte" → OBJECTS: latte, phone, LOCATION: cafe, ACTION: sitting, NSFW_LEVEL: 0
+- "photo at the gym working out" → OBJECTS: NONE, LOCATION: gym, ACTION: working out, NSFW_LEVEL: 0
 - "photo avec des lunettes" → OBJECTS: glasses, ACTION: wearing glasses, NSFW_LEVEL: 0
 - "une photo avec une sucette" → OBJECTS: lollipop, ACTION: holding lollipop, NSFW_LEVEL: 0
-- "photo topless seins nus" → CLOTHING: topless, ACTION: posing, NSFW_LEVEL: 3 (topless explicitly mentioned)
-- "photo sous la douche" → LOCATION: bathroom shower, OBJECTS: shower, ACTION: standing in shower, NSFW_LEVEL: 0 (NO nudity mentioned - could be clothed!)
-- "photo with wet shirt" → OBJECTS: wet shirt, CLOTHING: wet shirt, ACTION: posing, NSFW_LEVEL: 1
+- "photo topless seins nus" → OBJECTS: NONE, CLOTHING: topless, ACTION: posing, NSFW_LEVEL: 3
+- "photo avec un livre et un café" → OBJECTS: book, coffee, ACTION: reading, NSFW_LEVEL: 0
+- "photo en pyjama" → OBJECTS: pajamas, ACTION: posing, NSFW_LEVEL: 0
+- "send me a photo blowing a kiss" → OBJECTS: NONE, ACTION: blowing kiss, NSFW_LEVEL: 0
+- "photo of you dancing" → OBJECTS: NONE, ACTION: dancing, NSFW_LEVEL: 0
+- "show me you lying down relaxed" → OBJECTS: NONE, ACTION: lying down relaxed, NSFW_LEVEL: 0
+- "Photo professionnelle au bureau" → OBJECTS: desk, computer, LOCATION: office, ACTION: working, NSFW_LEVEL: 0
 
 CRITICAL NSFW RULES:
 - "bedroom" or "au lit" does NOT automatically mean NSFW! Only if nudity mentioned.
@@ -206,14 +219,22 @@ CRITICAL NSFW RULES:
 - "lingerie/bikini/tight dress" = NSFW 1 (suggestive, revealing clothes)
 - "topless/seins nus" = NSFW 3 (partial nudity)
 - "nude/nue/naked" = NSFW 4 (full nudity)
+- "blowjob/fellatio/oral sex/handjob/sex" = NSFW 5 (EXPLICIT sexual acts)
+
+CRITICAL NSFW 5 EXAMPLES (MUST detect these as level 5):
+- "photo de toi en train de faire un blowjob" → NSFW_LEVEL: 5, ACTION: performing oral sex
+- "envoie moi une photo en prof fesant un blowjob" → NSFW_LEVEL: 5, LOCATION: classroom, ACTION: performing oral sex on student
+- "photo of you giving a blowjob" → NSFW_LEVEL: 5, ACTION: performing oral sex
+- "pic of you sucking dick" → NSFW_LEVEL: 5, ACTION: performing oral sex
+- "photo de toi en train de sucer une bite" → NSFW_LEVEL: 5, ACTION: performing oral sex
 
 DO NOT default to nudity. Extract EVERY specific detail mentioned by the user!"""
 
     def __init__(self):
-        # Use fast model for intent analysis
+        # Use UNCENSORED model for intent analysis - Llama-3.1-8B-Instruct REFUSES NSFW content
         self.llm = AgentLLMClient(
             provider="novita",
-            model="meta-llama/Llama-3.1-8B-Instruct",
+            model="Sao10K/L3-8B-Stheno-v3.2",  # Uncensored model - can analyze explicit content
             agent_name="IntentionAnalyzer"
         )
 
@@ -284,7 +305,7 @@ What kind of image is the user asking for?"""
 
         # Parse new fields
         objects_str = data.get("OBJECTS", "NONE")
-        objects = [] if objects_str.upper() == "NONE" else [obj.strip() for obj in objects_str.split(',') if obj.strip()]
+        objects = [] if objects_str.upper() == "NONE" or not objects_str else [obj.strip() for obj in objects_str.split(',') if obj.strip()]
 
         action = data.get("ACTION", "posing").strip()
         location = data.get("LOCATION", "").strip()

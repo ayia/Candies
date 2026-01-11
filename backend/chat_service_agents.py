@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from models import Conversation, Message, Character, GeneratedImage
 from image_service_v4 import image_service_v4  # V4 optimized (9.74/10)
+from image_service import image_service  # Heartsync/Adult for NSFW 4-5
 from prompt_builder import extract_character_dict
 from config import settings
 from agents.agent_system import AgentSystem
@@ -107,24 +108,39 @@ class AgentChatService:
                 print(f"  Action: {custom_action}")
                 print(f"  Location: {custom_location}")
 
-                # Use V4 optimized service (9.74/10 validation score) with custom details
-                char_dict = extract_character_dict(character)
-                filenames = await image_service_v4.generate_character_image(
-                    character_dict=char_dict,
-                    nsfw_level=nsfw_level,
-                    outfit=None,  # Already detected by agent
-                    count=1,
-                    custom_objects=custom_objects if custom_objects else None,
-                    custom_action=custom_action,
-                    custom_location=custom_location,
-                    custom_pose=None  # Let action/objects build the pose
-                )
-
-                if filenames and len(filenames) > 0:
-                    filename = filenames[0]
+                # Choose service based on NSFW level
+                # V4 (Pollinations) for NSFW 0-3: High quality, free, optimized
+                # Heartsync/Adult for NSFW 4-5: Supports explicit content
+                if nsfw_level >= 4:
+                    print(f"[AgentChatService] Using Heartsync/Adult for explicit content (NSFW {nsfw_level})")
+                    # Use Heartsync/Adult service for explicit content (NSFW 4-5)
+                    filename = await image_service.generate(
+                        prompt=prompt,
+                        negative_prompt=agent_result.get("negative_prompt", ""),
+                        nsfw_level=nsfw_level,
+                        style=character.style
+                    )
                     image_url = f"/api/images/{filename}"
                 else:
-                    raise Exception("Failed to generate image with V4 service")
+                    print(f"[AgentChatService] Using V4 optimized service (NSFW {nsfw_level})")
+                    # Use V4 optimized service (9.74/10 validation score) with custom details
+                    char_dict = extract_character_dict(character)
+                    filenames = await image_service_v4.generate_character_image(
+                        character_dict=char_dict,
+                        nsfw_level=nsfw_level,
+                        outfit=None,  # Already detected by agent
+                        count=1,
+                        custom_objects=custom_objects if custom_objects else None,
+                        custom_action=custom_action,
+                        custom_location=custom_location,
+                        custom_pose=None  # Let action/objects build the pose
+                    )
+
+                    if filenames and len(filenames) > 0:
+                        filename = filenames[0]
+                        image_url = f"/api/images/{filename}"
+                    else:
+                        raise Exception("Failed to generate image with V4 service")
 
                 # Save to gallery
                 gen_image = GeneratedImage(

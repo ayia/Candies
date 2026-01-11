@@ -12,8 +12,13 @@ import hashlib
 from pathlib import Path
 from typing import List, Optional, Dict
 
+# Fix Windows encoding for emojis
 if sys.platform == 'win32':
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    if hasattr(sys.stdout, 'reconfigure'):
+        sys.stdout.reconfigure(encoding='utf-8')
+    if hasattr(sys.stderr, 'reconfigure'):
+        sys.stderr.reconfigure(encoding='utf-8')
 
 from image_prompt_generator_v4 import OptimizedPromptGenerator
 from config import settings
