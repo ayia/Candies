@@ -164,53 +164,95 @@ NSFW_LEVEL: [0-5] - Detect the ACTUAL level based on keywords.
   4 = Full nudity (completely naked, "nude/nue/naked" keywords, full body exposed)
   5 = EXPLICIT SEXUAL ACTS (blowjob, fellatio, oral sex, handjob, sex acts, "fesant un blowjob", "sucking dick/cock", intercourse)
 ELEMENTS: [comma-separated visual elements from the request]
-OBJECTS: [Extract objects/items EXPLICITLY mentioned or directly worn/held:
-  - Items held/used: lollipop, book, phone, glass, coffee, wine, camera, rose, umbrella
-  - Clothing WORN: lingerie, bikini, dress, shirt, pajamas, hat, sunglasses, necklace
-  - Furniture if EXPLICITLY stated: "au lit"→bed, "at desk"→desk
-  - Mandatory inference: "selfie"→phone, "mirror selfie"→phone+mirror
-  - DO NOT infer environmental objects (NO tables, chairs, saucers, menus, counters unless explicitly mentioned!)
-  - DO NOT add objects just because of location ("coffee shop" does NOT mean add table/chair/menu)
-  - Write "NONE" ONLY if absolutely nothing mentioned
-  - Format: "object1, object2" or "NONE"
-  - NEVER add comments, parentheses, or explanations like "NONE (not mentioned)" - just write "NONE"!]
-ACTION: [Extract EXACT action from request - be SPECIFIC:
-  - "en train de [verb]" → extract the verb (e.g., "sucking", "dancing", "reading")
-  - "[verb]ing" → extract the verb (e.g., "dancing", "laughing", "working out")
-  - "avec/with X" → "holding X"
-  - Location-based: "in bed"→"lying", "at gym"→"working out", "in kitchen"→"cooking"
-  - PRESERVE modifiers: "posing seductively" NOT just "posing"
-  - Be SPECIFIC: "sucking lollipop" NOT just "posing", "lying down" NOT just "posing"
-  - Default: "posing" ONLY if NO other action can be inferred]
-LOCATION: [ONE OR TWO WORDS MAXIMUM - ABSOLUTELY NO explanations or parentheses:
-  - Valid: "classroom", "bedroom", "office", "bathroom", "beach", "gym", "kitchen", "cafe", "NONE"
-  - Normalize: "coffee shop"→"cafe", "office desk"→"office", "at gym"→"gym"
-  - NEVER write: "NONE (private setting...)", "unspecified location, possibly...", "bedroom (implied)"
-  - NEVER write: "classroom with blackboard", "bathroom shower", "coffee shop", "indoor unspecified"
-  - Write ONLY ONE WORD: "classroom" OR "bathroom" OR "cafe" OR "NONE"
-  - If location mentioned: extract it. If not mentioned: write "NONE" - NO COMMENTS!]
+OBJECTS: [List objects mentioned. NO environmental extras!
+  - Physical items: book, phone, lollipop, coffee, wine glass, rose, camera, umbrella
+  - Clothing/accessories: lingerie, bikini, dress, pajamas, hat, sunglasses, glasses, necklace, headphones
+  - Furniture ONLY if mentioned: bed (from "au lit"), desk (from "bureau")
+  - Special rules:
+    * "selfie" → add phone
+    * "mirror selfie" → add phone, mirror
+    * "avec un verre de vin" → wine glass (NOT table, chair!)
+    * "bureau professionnel" → desk, computer
+  - NO environmental extras: NO table, chair, saucer, menu, counter, towel
+  - Write just: "object1, object2" or "NONE" - NO COMMENTS!]
+ACTION: [SIMPLE, CONCISE action - ONE or TWO words maximum!
+  - "en train de [verb]" → the verb (sucking, dancing, reading, cooking)
+  - "[verb]ing" → the verb (dancing, laughing, working out, blowing kiss)
+  - "avec X" → holding X (NOT "holding X, doing Y" - JUST "holding X")
+  - "wearing X" → wearing X
+  - Location actions: "in bed"→lying, "at gym"→working out, "in kitchen"→cooking, "at beach"→standing
+  - NEVER write long descriptions: "enjoying X and Y", "standing and doing X", "holding X, striking Y pose"
+  - NEVER write: "NOT specified", "unspecified", "possibly", "could be", "none specified"
+  - If sexy/flirty AND no other action: "posing seductively"
+  - If cute/casual: "smiling" or "posing"
+  - Default: "posing" (if absolutely no action mentioned)]
+LOCATION: [ONE WORD location - normalize it!
+  - Normalize: "coffee shop"→cafe, "at gym"→gym, "dans la cuisine"→kitchen, "car interior"→car
+  - "outdoor"/"d'été" → outdoor
+  - Valid: bedroom, bathroom, classroom, office, gym, beach, kitchen, cafe, park, car, outdoor, NONE
+  - Write ONE WORD: "cafe" NOT "coffee shop", "car" NOT "vehicle"
+  - NO comments, NO explanations!]
 
-CRITICAL EXAMPLES (ITERATION 4 - NO over-inference, SPECIFIC actions):
+CRITICAL EXAMPLES (ITERATION 6 - CONCISE ACTIONS, teach the LLM precision):
+
+ACTION CONCISENESS - THESE ARE CORRECT:
 - "photo de toi en train de sucer une sucette" → OBJECTS: lollipop, ACTION: sucking lollipop, NSFW_LEVEL: 1
-- "photo de toi en prof sexy dans ta classe" → OBJECTS: glasses, desk, blackboard, LOCATION: classroom, ACTION: standing confidently, NSFW_LEVEL: 1
+- "Photo romantique avec du vin et des bougies" → OBJECTS: wine, candles, ACTION: sitting, NSFW_LEVEL: 0
+  ❌ WRONG: "enjoying wine and candlelight together" (TOO VERBOSE!)
+- "Photo d'été avec des fleurs, un chapeau et des lunettes de soleil" → OBJECTS: flowers, hat, sunglasses, ACTION: posing, NSFW_LEVEL: 0
+  ❌ WRONG: "standing and enjoying the summer scene" (TOO VERBOSE!)
+- "send me une photo sexy avec un coffee" → OBJECTS: coffee, ACTION: posing, NSFW_LEVEL: 1
+  ❌ WRONG: "holding coffee, striking a sexy pose" (TOO VERBOSE - pick ONE action!)
+- "allongée sur ton lit avec un livre et un café, portant tes lunettes" → OBJECTS: bed, book, coffee, glasses, LOCATION: bedroom, ACTION: lying down, NSFW_LEVEL: 0
+  ❌ WRONG: "reading and drinking coffee" (TOO VERBOSE - primary action is "lying down"!)
+
+ACTION "NONE SPECIFIED" - ALWAYS PROVIDE A DEFAULT:
+- "Outdoor photo in the park" → OBJECTS: NONE, LOCATION: park, ACTION: standing, NSFW_LEVEL: 0
+  ❌ WRONG: "not specified" (NEVER write "not specified"!)
+- "Cute photo in casual clothes" → OBJECTS: NONE, ACTION: smiling, NSFW_LEVEL: 0
+  ❌ WRONG: "none specified" (cute = smiling!)
+- "Photo complètement nue" → OBJECTS: NONE, CLOTHING: completely nude, ACTION: posing, NSFW_LEVEL: 3
+  ❌ WRONG: "none specified" (nude photos = posing!)
+
+ACTION WEARING vs HOLDING:
+- "Show me a photo wearing a necklace" → OBJECTS: necklace, ACTION: wearing, NSFW_LEVEL: 0
+  ❌ WRONG: "posing" (necklace is WORN, not held!)
+- "Show me a selfie with your phone" → OBJECTS: phone, ACTION: holding, NSFW_LEVEL: 0
+  ❌ WRONG: "taking selfie" (phone is in hand = holding!)
+- "photo avec des lunettes" → OBJECTS: glasses, ACTION: wearing, NSFW_LEVEL: 0
+- "Une photo avec des écouteurs" → OBJECTS: headphones, ACTION: wearing, NSFW_LEVEL: 0
+
+LOCATION NORMALIZATION:
+- "Outdoor photo in the park" → LOCATION: park (NOT "outdoor"!)
+- "Coffee shop photo with a latte" → OBJECTS: latte, phone, LOCATION: cafe, ACTION: sitting, NSFW_LEVEL: 0
+
+OBJECTS EXTRACTION (classroom example):
+- "photo de toi en prof sexy dans ta classe" → OBJECTS: glasses, desk, blackboard, LOCATION: classroom, ACTION: standing, NSFW_LEVEL: 1
+  (classroom = teacher props: glasses, desk, blackboard)
+
+STANDARD EXAMPLES:
 - "envoie moi une photo sexy en lingerie" → OBJECTS: lingerie, ACTION: posing seductively, NSFW_LEVEL: 1
 - "photo nue dans ton lit" → OBJECTS: bed, LOCATION: bedroom, CLOTHING: completely nude, ACTION: lying, NSFW_LEVEL: 4
-- "selfie avec ton café" → OBJECTS: coffee, phone, ACTION: holding coffee, NSFW_LEVEL: 0
+- "selfie avec ton café" → OBJECTS: coffee, phone, ACTION: holding, NSFW_LEVEL: 0
 - "bathroom mirror selfie" → OBJECTS: phone, mirror, LOCATION: bathroom, ACTION: taking selfie, NSFW_LEVEL: 0
 - "photo in a tight dress" → OBJECTS: dress, ACTION: posing, NSFW_LEVEL: 1
 - "photo de toi dans ta chambre au lit" → OBJECTS: bed, LOCATION: bedroom, ACTION: lying, NSFW_LEVEL: 0
 - "show me in a tiny bikini" → OBJECTS: bikini, ACTION: posing, NSFW_LEVEL: 1
-- "Coffee shop photo with a latte" → OBJECTS: latte, phone, LOCATION: cafe, ACTION: sitting, NSFW_LEVEL: 0
 - "photo at the gym working out" → OBJECTS: NONE, LOCATION: gym, ACTION: working out, NSFW_LEVEL: 0
-- "photo avec des lunettes" → OBJECTS: glasses, ACTION: wearing glasses, NSFW_LEVEL: 0
-- "une photo avec une sucette" → OBJECTS: lollipop, ACTION: holding lollipop, NSFW_LEVEL: 0
+- "une photo avec une sucette" → OBJECTS: lollipop, ACTION: holding, NSFW_LEVEL: 0
 - "photo topless seins nus" → OBJECTS: NONE, CLOTHING: topless, ACTION: posing, NSFW_LEVEL: 3
 - "photo avec un livre et un café" → OBJECTS: book, coffee, ACTION: reading, NSFW_LEVEL: 0
-- "photo en pyjama" → OBJECTS: pajamas, ACTION: posing, NSFW_LEVEL: 0
+- "photo en pyjama" → OBJECTS: pajamas, ACTION: lying, NSFW_LEVEL: 0
 - "send me a photo blowing a kiss" → OBJECTS: NONE, ACTION: blowing kiss, NSFW_LEVEL: 0
 - "photo of you dancing" → OBJECTS: NONE, ACTION: dancing, NSFW_LEVEL: 0
-- "show me you lying down relaxed" → OBJECTS: NONE, ACTION: lying down relaxed, NSFW_LEVEL: 0
+- "show me you lying down relaxed" → OBJECTS: NONE, ACTION: lying down, NSFW_LEVEL: 0
 - "Photo professionnelle au bureau" → OBJECTS: desk, computer, LOCATION: office, ACTION: working, NSFW_LEVEL: 0
+- "Montre moi une photo avec un verre de vin" → OBJECTS: wine glass, ACTION: holding, NSFW_LEVEL: 0
+- "photo at the beach" → OBJECTS: NONE, LOCATION: beach, ACTION: standing, NSFW_LEVEL: 0
+- "Selfie dans ta voiture" → OBJECTS: phone, LOCATION: car, ACTION: taking selfie, NSFW_LEVEL: 0
+- "Photo de toi dans la cuisine" → OBJECTS: NONE, LOCATION: kitchen, ACTION: cooking, NSFW_LEVEL: 0
+- "Photo sous la douche" → OBJECTS: NONE, LOCATION: bathroom, ACTION: showering, NSFW_LEVEL: 2
+- "Send a flirty photo" → OBJECTS: NONE, ACTION: posing seductively, NSFW_LEVEL: 1
 
 CRITICAL NSFW RULES:
 - "bedroom" or "au lit" does NOT automatically mean NSFW! Only if nudity mentioned.
@@ -256,9 +298,9 @@ IMPORTANT: Be precise about NSFW level. Only use high levels (3-5) if nudity is 
 What kind of image is the user asking for?"""
 
         response = await self.llm.generate(self.SYSTEM_PROMPT, user_prompt, max_tokens=250)
-        return self._parse_response(response)
+        return self._parse_response(response, user_message)
 
-    def _parse_response(self, response: str) -> IntentionResult:
+    def _parse_response(self, response: str, request: str) -> IntentionResult:
         """Parse LLM response into IntentionResult"""
         lines = response.strip().split('\n')
         data = {}
@@ -311,6 +353,90 @@ What kind of image is the user asking for?"""
         location = data.get("LOCATION", "").strip()
         if location.upper() == "NONE":
             location = ""
+
+        # POST-PROCESSING: FORCE corrections that LLM ignores
+
+        # 1. FILTER forbidden environmental objects (but keep actual objects!)
+        forbidden_patterns = [
+            "coffee shop props", "tables", "chairs", "decor", "possibly", "items", "kitchen items",
+            "shower head", "shower caddy", "etc.", "not specified", "(assumed", "(if present)"
+        ]
+        cleaned_objects = []
+        for obj in objects:
+            obj_lower = obj.lower()
+            # Skip if it's a forbidden pattern
+            if any(pattern in obj_lower for pattern in forbidden_patterns):
+                continue
+            # Skip if it's too vague
+            if len(obj) < 3 or "possibly" in obj_lower:
+                continue
+            cleaned_objects.append(obj)
+        objects = cleaned_objects
+
+        # 2. NORMALIZE location (force single word)
+        location_map = {
+            "coffee shop": "cafe",
+            "car interior": "car",
+            "vehicle": "car",
+            "shower stall": "bathroom",
+            "garden": "outdoor"
+        }
+        location_lower = location.lower()
+        for pattern, replacement in location_map.items():
+            if pattern in location_lower:
+                location = replacement
+                break
+
+        # Remove verbose location (take first word if multi-word)
+        if location and "," in location:
+            location = location.split(",")[0].strip()
+        if location and len(location.split()) > 2:
+            location = location.split()[0]
+
+        # 3. CLEAN vague actions & fix verbosity
+        request_lower = request.lower()
+
+        # Fix "none specified" / "not specified"
+        vague_patterns = ["NOT specified", "not specified", "none specified", "unspecified", "possibly", "could be", "likely"]
+        for pattern in vague_patterns:
+            if pattern in action.lower():
+                # Determine default action based on request
+                if "cute" in request_lower or "casual" in request_lower:
+                    action = "smiling"
+                elif "nude" in request_lower or "nue" in request_lower or "naked" in request_lower:
+                    action = "posing"
+                elif "outdoor" in request_lower or "park" in request_lower:
+                    action = "standing"
+                else:
+                    action = "posing"
+                break
+
+        # Fix verbosity: simplify compound actions
+        verbose_patterns = {
+            "enjoying wine and candlelight together": "sitting",
+            "standing and enjoying": "posing",
+            "holding coffee, striking": "posing",
+            "reading and drinking": "lying down",
+            "enjoying the summer scene": "posing"
+        }
+        action_lower = action.lower()
+        for verbose, simple in verbose_patterns.items():
+            if verbose in action_lower:
+                action = simple
+                break
+
+        # If action contains " and ", take the first part
+        if " and " in action_lower and "," not in action:
+            action = action.split(" and ")[0].strip()
+
+        # If action contains ", " (comma), take the first part
+        if ", " in action:
+            action = action.split(", ")[0].strip()
+
+        # 4. ADD seductively to sexy/lingerie/flirty
+        if ("sexy" in request_lower or "lingerie" in request_lower or "flirty" in request_lower or "flirt" in request_lower):
+            if "posing" in action.lower() and "seductively" not in action.lower() and "playfully" not in action.lower():
+                action = "posing seductively"
 
         return IntentionResult(
             scene_type=scene_map.get(scene_str, SceneType.PORTRAIT),
