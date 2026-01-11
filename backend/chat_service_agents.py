@@ -96,13 +96,28 @@ class AgentChatService:
                 print(f"[AgentChatService] PROMPT: {prompt}")
                 print(f"{'='*60}\n")
 
-                # Use V4 optimized service (9.74/10 validation score)
+                # Extract custom details from agent analysis
+                intent_data = agent_result.get("intent", {})
+                custom_objects = intent_data.get("objects", [])
+                custom_action = intent_data.get("action", None)
+                custom_location = intent_data.get("location", None)
+
+                print(f"[AgentChatService] Custom details extracted:")
+                print(f"  Objects: {custom_objects}")
+                print(f"  Action: {custom_action}")
+                print(f"  Location: {custom_location}")
+
+                # Use V4 optimized service (9.74/10 validation score) with custom details
                 char_dict = extract_character_dict(character)
                 filenames = await image_service_v4.generate_character_image(
                     character_dict=char_dict,
                     nsfw_level=nsfw_level,
                     outfit=None,  # Already detected by agent
-                    count=1
+                    count=1,
+                    custom_objects=custom_objects if custom_objects else None,
+                    custom_action=custom_action,
+                    custom_location=custom_location,
+                    custom_pose=None  # Let action/objects build the pose
                 )
 
                 if filenames and len(filenames) > 0:

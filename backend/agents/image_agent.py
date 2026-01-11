@@ -127,6 +127,11 @@ Output ONLY valid JSON."""
                     multi_agent_nsfw_level = result.get("nsfw_level", nsfw_level)
                     print(f"[ImageAgent] Multi-agent success: {result['prompt'][:80]}...")
                     print(f"[ImageAgent] Multi-agent NSFW level: {multi_agent_nsfw_level}")
+                    # CRITICAL: Extract custom details from multi-agent result
+                    custom_objects = result.get("objects", [])
+                    custom_action = result.get("action", None)
+                    custom_location = result.get("location", None)
+                    print(f"[ImageAgent] Custom details - Objects: {custom_objects}, Action: {custom_action}, Location: {custom_location}")
                     return {
                         "prompt": result["prompt"],
                         "negative_prompt": result.get("negative_prompt", ""),
@@ -135,6 +140,10 @@ Output ONLY valid JSON."""
                         "style": character.get("style", "realistic"),
                         "steps": 8,  # Z-Image-Turbo optimal
                         "guidance": 0.0,  # Z-Image-Turbo doesn't use guidance
+                        # CRITICAL: Propagate custom details for V4 generator
+                        "objects": custom_objects,
+                        "action": custom_action,
+                        "location": custom_location,
                         "metadata": result.get("metadata", {})
                     }
             except Exception as e:

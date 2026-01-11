@@ -103,7 +103,11 @@ class OptimizedPromptGenerator:
     def generate_optimized_prompt(
         self,
         nsfw_level: int = 0,
-        previous_prompts: List[str] = None
+        previous_prompts: List[str] = None,
+        custom_objects: List[str] = None,
+        custom_action: str = None,
+        custom_location: str = None,
+        custom_pose: str = None
     ) -> Tuple[str, str]:
         """
         Generate optimized prompt targeting ≥9.0/10 composite score.
@@ -114,10 +118,15 @@ class OptimizedPromptGenerator:
         - Quality enhancers included
         - Specific lighting
         - Performance keywords
+        - Custom details from user request
 
         Args:
             nsfw_level: 0=SFW, 1=Lingerie, 2=Topless, 3=Full nude
             previous_prompts: History for diversity
+            custom_objects: Specific objects mentioned (lollipop, glasses, etc.)
+            custom_action: Specific action (sucking lollipop, reading, etc.)
+            custom_location: Specific location (classroom, bedroom, etc.)
+            custom_pose: Custom pose override
 
         Returns:
             (positive_prompt, negative_prompt)
@@ -142,11 +151,29 @@ class OptimizedPromptGenerator:
         # Camera
         camera = random.choice(self.cameras)
 
-        # Context
-        context = random.choice(self.contexts)
+        # Context - use custom location if provided
+        if custom_location:
+            context = custom_location
+        else:
+            context = random.choice(self.contexts)
 
-        # Pose
-        pose = random.choice(self.poses)
+        # Pose - use custom pose/action if provided
+        if custom_pose:
+            pose = custom_pose
+        elif custom_action:
+            # Build pose from action + objects
+            if custom_objects:
+                objects_str = ", ".join(custom_objects)
+                pose = f"{custom_action}, holding {objects_str}"
+            else:
+                pose = custom_action
+        else:
+            pose = random.choice(self.poses)
+
+        # Add custom objects to the pose if not already included
+        if custom_objects and not custom_action:
+            objects_str = ", ".join(custom_objects)
+            pose = f"{pose}, with {objects_str}"
 
         # === NSFW CLOTHING ===
         if nsfw_level == 0:

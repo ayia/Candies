@@ -64,6 +64,10 @@ class IntentionResult:
     nsfw_requested: bool
     nsfw_level: int  # 0-5
     key_elements: List[str]
+    # NEW: Additional details for accurate prompt generation
+    objects: List[str]  # Physical objects mentioned (lollipop, glasses, book, etc.)
+    action: str  # What the character is doing (sucking, reading, posing, etc.)
+    location: str  # Specific location if mentioned (classroom, bedroom, office, etc.)
 
 
 @dataclass
@@ -141,7 +145,7 @@ class IntentionAnalyzer:
 IMPORTANT RULES:
 1. Understand requests in ANY language (French, English, Spanish, etc.)
 2. Be PRECISE about what the user is asking - don't assume nudity unless explicitly requested
-3. Consider the CHARACTER CONTEXT provided - use it to enrich the scene
+3. Extract ALL specific details: objects, actions, locations
 4. "Sexy" does NOT mean "nude" - sexy can be clothed, seductive, teasing
 
 Respond in this EXACT format (one line per field):
@@ -159,16 +163,18 @@ NSFW_LEVEL: [0-5] - BE CONSERVATIVE! Only high level if explicitly asked
   4 = Full frontal nudity, completely naked
   5 = Very explicit sexual content
 ELEMENTS: [comma-separated visual elements from the request]
+OBJECTS: [comma-separated list of physical objects mentioned - lollipop, glasses, book, phone, etc. - NONE if nothing specific]
+ACTION: [what character is doing - sucking lollipop, reading book, posing, standing, etc. - "posing" as default]
+LOCATION: [specific location if mentioned - classroom, bedroom, office, car, outdoor, etc. - NONE if generic]
 
 CRITICAL EXAMPLES:
-- "photo de toi en prof sexy" -> NSFW_LEVEL: 1, CLOTHING: tight business suit, glasses, professional but sexy
-- "photo sexy dans ta classe" -> NSFW_LEVEL: 1-2, SETTING: classroom with chalkboard, CLOTHING: revealing professional outfit
-- "photo en lingerie" -> NSFW_LEVEL: 2, CLOTHING: lace lingerie, bra and panties
-- "photo nue" / "envoie moi nue" -> NSFW_LEVEL: 4, CLOTHING: completely nude, naked
-- "selfie" -> NSFW_LEVEL: 0, CLOTHING: casual everyday outfit
-- "photo sexy" (alone) -> NSFW_LEVEL: 1, CLOTHING: sexy revealing but clothed
+- "photo de toi en train de sucer une sucette" -> OBJECTS: colorful lollipop candy, ACTION: sucking lollipop with tongue visible, NSFW_LEVEL: 1
+- "photo de toi en prof sexy dans ta classe" -> LOCATION: classroom with blackboard, OBJECTS: glasses, teacher desk, ACTION: standing confidently, CLOTHING: tight business suit
+- "envoie moi une photo sexy en lingerie" -> CLOTHING: lace lingerie, NSFW_LEVEL: 2, ACTION: posing seductively
+- "photo nue dans ton lit" -> NSFW_LEVEL: 4, CLOTHING: completely nude, LOCATION: bedroom, OBJECTS: bed with sheets
+- "selfie avec ton café" -> OBJECTS: coffee mug, ACTION: holding mug, taking selfie, NSFW_LEVEL: 0
 
-DO NOT default to nudity. Only NSFW_LEVEL 3-5 if user explicitly asks for nudity/topless/naked."""
+DO NOT default to nudity. Extract EVERY specific detail mentioned by the user!"""
 
     def __init__(self):
         # Use fast model for intent analysis
@@ -243,6 +249,15 @@ What kind of image is the user asking for?"""
         elements_str = data.get("ELEMENTS", "")
         elements = [e.strip() for e in elements_str.split(',') if e.strip()]
 
+        # Parse new fields
+        objects_str = data.get("OBJECTS", "NONE")
+        objects = [] if objects_str.upper() == "NONE" else [obj.strip() for obj in objects_str.split(',') if obj.strip()]
+
+        action = data.get("ACTION", "posing").strip()
+        location = data.get("LOCATION", "").strip()
+        if location.upper() == "NONE":
+            location = ""
+
         return IntentionResult(
             scene_type=scene_map.get(scene_str, SceneType.PORTRAIT),
             mood=mood_map.get(mood_str, MoodType.HAPPY),
@@ -251,7 +266,10 @@ What kind of image is the user asking for?"""
             pose_hint=data.get("POSE", "natural pose"),
             nsfw_requested=nsfw_requested,
             nsfw_level=min(5, max(0, nsfw_level)),
-            key_elements=elements
+            key_elements=elements,
+            objects=objects,
+            action=action,
+            location=location
         )
 
 
@@ -747,6 +765,10 @@ class ImagePromptOrchestrator:
             "negative_prompt": final.negative_prompt,
             "nsfw_level": final.nsfw_level,
             "is_nsfw": final.nsfw_level >= 2,
+            # CRITICAL: Include intention data for custom prompt generation (objects, action, location)
+            "objects": intention.objects,
+            "action": intention.action,
+            "location": intention.location,
             "metadata": {
                 "scene_type": intention.scene_type.value,
                 "mood": intention.mood.value,
@@ -757,6 +779,7 @@ class ImagePromptOrchestrator:
         }
 
         logger.info(f"[Orchestrator] FINAL PROMPT: {result['prompt'][:100]}...")
+        logger.info(f"[Orchestrator] Custom details - Objects: {intention.objects}, Action: {intention.action}, Location: {intention.location}")
         return result
 
 

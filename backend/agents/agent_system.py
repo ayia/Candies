@@ -276,6 +276,11 @@ class AgentSystem:
                 image_nsfw_level = image_data.get("nsfw_level", intent_data.get("nsfw_level", 0))
                 generate_image = bool(image_prompt)
 
+                # CRITICAL: Extract custom details from image agent for V4 generator
+                custom_objects = image_data.get("objects", [])
+                custom_action = image_data.get("action", None)
+                custom_location = image_data.get("location", None)
+
                 step_duration = (time.time() - step_start) * 1000
                 trace.events.append(TraceEvent(
                     timestamp=datetime.now(timezone.utc).isoformat(),
@@ -319,6 +324,7 @@ class AgentSystem:
         print(f"[AgentSystem] Total duration: {trace.total_duration_ms:.0f}ms")
         print(f"{'='*60}\n")
 
+        # Build final result with custom details if image was requested
         result = {
             "response": response,
             "generate_image": generate_image,
@@ -327,6 +333,14 @@ class AgentSystem:
             "image_nsfw_level": image_nsfw_level,  # NSFW level from multi-agent system
             "intent": intent_data
         }
+
+        # CRITICAL: Add custom details to intent if image was generated
+        if generate_image and (custom_objects or custom_action or custom_location):
+            if "intent" not in result:
+                result["intent"] = {}
+            result["intent"]["objects"] = custom_objects
+            result["intent"]["action"] = custom_action
+            result["intent"]["location"] = custom_location
 
         if self.enable_tracing:
             result["trace"] = trace

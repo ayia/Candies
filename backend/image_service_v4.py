@@ -78,7 +78,11 @@ class ImageServiceV4:
         character_dict: Dict,
         nsfw_level: Optional[int] = None,
         outfit: Optional[str] = None,
-        count: int = 1
+        count: int = 1,
+        custom_objects: List[str] = None,
+        custom_action: str = None,
+        custom_location: str = None,
+        custom_pose: str = None
     ) -> List[str]:
         """
         Generate images for a character with V4 optimized prompts.
@@ -105,10 +109,14 @@ class ImageServiceV4:
         async with aiohttp.ClientSession() as session:
             for i in range(count):
                 try:
-                    # Generate V4 optimized prompt
+                    # Generate V4 optimized prompt with custom details
                     prompt, negative = self.generator.generate_optimized_prompt(
                         nsfw_level=nsfw_level,
-                        previous_prompts=self.previous_prompts
+                        previous_prompts=self.previous_prompts,
+                        custom_objects=custom_objects,
+                        custom_action=custom_action,
+                        custom_location=custom_location,
+                        custom_pose=custom_pose
                     )
 
                     # Track for diversity
