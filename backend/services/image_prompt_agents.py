@@ -253,6 +253,10 @@ STANDARD EXAMPLES:
 - "Photo de toi dans la cuisine" → OBJECTS: NONE, LOCATION: kitchen, ACTION: cooking, NSFW_LEVEL: 0
 - "Photo sous la douche" → OBJECTS: NONE, LOCATION: bathroom, ACTION: showering, NSFW_LEVEL: 2
 - "Send a flirty photo" → OBJECTS: NONE, ACTION: posing seductively, NSFW_LEVEL: 1
+- "Fais moi un clin d'œil" → OBJECTS: NONE, ACTION: winking, NSFW_LEVEL: 0
+- "Photo with an umbrella" → OBJECTS: umbrella, ACTION: holding, NSFW_LEVEL: 0
+- "Photo of you reading a book with coffee" → OBJECTS: book, coffee, ACTION: reading, NSFW_LEVEL: 0
+- "allongée sur ton lit avec un livre" → OBJECTS: bed, book, coffee, glasses, pajamas, LOCATION: bedroom, ACTION: lying down, NSFW_LEVEL: 0
 
 CRITICAL NSFW RULES:
 - "bedroom" or "au lit" does NOT automatically mean NSFW! Only if nudity mentioned.
@@ -657,6 +661,8 @@ Your job is to combine:
 1. A character's physical description (MUST be used EXACTLY as provided)
 2. Scene/mood/setting requirements
 3. CLOTHING (use EXACTLY what is specified - this is the user's choice!)
+4. OBJECTS (MUST include ALL specified objects in the prompt!)
+5. ACTION (MUST include the exact action specified!)
 
 OUTPUT FORMAT: Return ONLY the prompt text, nothing else.
 
@@ -667,13 +673,21 @@ RULES:
    - If "lingerie" -> use lingerie, NOT nude
    - If "completely nude" -> then use nude
 3. Add the SETTING as described - be specific (classroom, bedroom, office, etc.)
-4. Add pose based on mood
-5. End with quality tags: "RAW photo, masterpiece, best quality, ultra realistic, 8k uhd"
+4. MANDATORY: Include ALL objects mentioned in "OBJECTS (MUST include)"
+   - If objects specified: lollipop, glasses, phone → MUST appear in final prompt
+   - DO NOT skip or omit any listed objects!
+5. MANDATORY: Include the exact ACTION specified
+   - If ACTION says "holding lollipop" → prompt MUST say "holding lollipop"
+   - If ACTION says "wearing glasses" → prompt MUST say "wearing glasses"
+   - If ACTION says "blowing kiss" → prompt MUST say "blowing kiss"
+6. End with quality tags: "RAW photo, masterpiece, best quality, ultra realistic, 8k uhd"
 
 CRITICAL:
 - Use EXACT physical description provided
 - Use EXACT clothing specified (DO NOT default to nude!)
-- Include DETAILED setting from the request"""
+- Include DETAILED setting from the request
+- INCLUDE ALL OBJECTS LISTED (this is mandatory!)
+- INCLUDE THE EXACT ACTION (this is mandatory!)"""
 
     def __init__(self):
         # Use Llama-3.1 model on novita (Mistral-7B not available on HF router)
@@ -715,6 +729,20 @@ CRITICAL:
         elif intention.nsfw_level >= 1:
             nsfw_tags = "sensual, seductive, "
 
+        # Build objects/action/location instructions
+        objects_instruction = ""
+        if intention.objects and len(intention.objects) > 0:
+            objects_list = ', '.join(intention.objects)
+            objects_instruction = f"\n- OBJECTS (MUST include these exact items): {objects_list}"
+
+        action_instruction = ""
+        if intention.action:
+            action_instruction = f"\n- ACTION (MUST show this): {intention.action}"
+
+        location_instruction = ""
+        if intention.location:
+            location_instruction = f"\n- LOCATION: {intention.location}"
+
         user_prompt = f"""Create an image generation prompt:
 
 CHARACTER (use EXACTLY as written):
@@ -723,15 +751,15 @@ CHARACTER (use EXACTLY as written):
 REQUIREMENTS:
 - Scene type: {intention.scene_type.value}
 - Mood: {intention.mood.value}
-- SETTING (be specific!): {intention.setting}
+- SETTING (be specific!): {intention.setting}{location_instruction}
 - CLOTHING (use EXACTLY): {clothing_instruction}
-- Pose: {intention.pose_hint}
+- Pose: {intention.pose_hint}{action_instruction}{objects_instruction}
 - Style: {style}
 - NSFW Level: {intention.nsfw_level}/5
 - Additional elements: {', '.join(intention.key_elements) if intention.key_elements else 'none'}
 
 {nsfw_tags}Create the final prompt. Use the character description EXACTLY. Use the EXACT clothing specified.
-Include the setting details in the prompt."""
+Include ALL objects, action, and location details in the final prompt."""
 
         response = await self.llm.generate(self.SYSTEM_PROMPT, user_prompt, max_tokens=500)
 
