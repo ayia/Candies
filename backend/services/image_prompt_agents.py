@@ -145,8 +145,9 @@ class IntentionAnalyzer:
 IMPORTANT RULES:
 1. Understand requests in ANY language (French, English, Spanish, etc.)
 2. Be PRECISE about what the user is asking - don't assume nudity unless explicitly requested
-3. Extract ALL specific details: objects, actions, locations
+3. Extract ALL specific details: objects (INCLUDING clothing), actions, locations
 4. "Sexy" does NOT mean "nude" - sexy can be clothed, seductive, teasing
+5. INFER obvious objects from context (selfie→phone, mirror selfie→phone+mirror, lying down→bed)
 
 Respond in this EXACT format (one line per field):
 SCENE: [portrait/full_body/action/romantic/intimate/casual/artistic/professional]
@@ -155,24 +156,56 @@ SETTING: [DETAILED setting description based on character context and request]
 CLOTHING: [SPECIFIC clothing - be detailed! Examples: "tight grey business suit with white shirt", "black lace lingerie", "completely nude"]
 POSE: [specific pose with details]
 NSFW: [yes/no]
-NSFW_LEVEL: [0-5] - BE CONSERVATIVE! Only high level if explicitly asked
-  0 = Safe for work, normal photo, casual outfit
-  1 = Suggestive, flirty, sexy but fully clothed (tight clothes, cleavage)
-  2 = Revealing: lingerie, bikini, underwear visible
-  3 = Topless, partial nudity, bare breasts
-  4 = Full frontal nudity, completely naked
-  5 = Very explicit sexual content
+NSFW_LEVEL: [0-5] - BE VERY CONSERVATIVE! Most requests are 0-1. Only use 3+ if nudity EXPLICITLY mentioned.
+  0 = Safe for work (normal photo, casual clothes, bedroom reading, pajamas, shower with clothes)
+  1 = Suggestive/flirty (sexy pose, tight dress, lingerie, bikini, seductive look, "sexy" keyword)
+  2 = Revealing (underwear visible, very revealing lingerie, wet shirt showing body)
+  3 = Topless (partial nudity, bare breasts, "topless" keyword)
+  4 = Full nudity (completely naked, "nude/nue/naked" keywords, full body exposed)
+  5 = Very explicit sexual content (explicit poses, sexual acts)
 ELEMENTS: [comma-separated visual elements from the request]
-OBJECTS: [comma-separated list of physical objects mentioned - lollipop, glasses, book, phone, etc. - NONE if nothing specific]
-ACTION: [what character is doing - sucking lollipop, reading book, posing, standing, etc. - "posing" as default]
-LOCATION: [specific location if mentioned - classroom, bedroom, office, car, outdoor, etc. - NONE if generic]
+OBJECTS: [comma-separated list - ONLY extract objects EXPLICITLY mentioned + these SPECIFIC inferences:
+  - EXPLICIT objects ONLY: lollipop, book, glasses, coffee, lingerie, bikini, dress, shirt, bed, etc.
+  - SPECIFIC inferences: "selfie"→phone, "mirror selfie"→phone+mirror
+  - DO NOT add extra contextual objects (no beach towels for bikini, no pillows for bed)
+  - DO NOT add meta-comments like "NONE (no specific...)" or "NSFW_LEVEL: X"
+  - Format: "object1, object2, object3" OR just "NONE" (nothing else!)]
+ACTION: [what character is doing - PRESERVE exact wording and modifiers from request:
+  - If "posing seductively" → write "posing seductively" (KEEP modifiers like seductively/sexily!)
+  - "avec X" → "holding X"
+  - "wearing X" → "wearing X"
+  - "en train de [verb]" → extract verb exactly
+  - "selfie" → "taking selfie"
+  - Default: "posing" ONLY if truly no action]
+LOCATION: [ONE WORD or short phrase - ABSOLUTELY NO explanations:
+  - Examples: "classroom", "bedroom", "office", "bathroom", "beach", "NONE"
+  - NEVER write: "NONE (private setting...)" or "unspecified location, possibly..."
+  - NEVER write: "bedroom (implied from context)"
+  - Just write: "bedroom" or "NONE" - that's it!]
 
-CRITICAL EXAMPLES:
-- "photo de toi en train de sucer une sucette" -> OBJECTS: colorful lollipop candy, ACTION: sucking lollipop with tongue visible, NSFW_LEVEL: 1
-- "photo de toi en prof sexy dans ta classe" -> LOCATION: classroom with blackboard, OBJECTS: glasses, teacher desk, ACTION: standing confidently, CLOTHING: tight business suit
-- "envoie moi une photo sexy en lingerie" -> CLOTHING: lace lingerie, NSFW_LEVEL: 2, ACTION: posing seductively
-- "photo nue dans ton lit" -> NSFW_LEVEL: 4, CLOTHING: completely nude, LOCATION: bedroom, OBJECTS: bed with sheets
-- "selfie avec ton café" -> OBJECTS: coffee mug, ACTION: holding mug, taking selfie, NSFW_LEVEL: 0
+CRITICAL EXAMPLES (with ALL fixes applied):
+- "photo de toi en train de sucer une sucette" → OBJECTS: colorful lollipop candy, ACTION: sucking lollipop with tongue visible, NSFW_LEVEL: 1
+- "photo de toi en prof sexy dans ta classe" → LOCATION: classroom with blackboard, OBJECTS: glasses, teacher desk, blackboard, ACTION: standing confidently, CLOTHING: tight business suit, NSFW_LEVEL: 1
+- "envoie moi une photo sexy en lingerie" → OBJECTS: lingerie, CLOTHING: lace lingerie, ACTION: posing seductively, NSFW_LEVEL: 1
+- "photo nue dans ton lit" → NSFW_LEVEL: 4, CLOTHING: completely nude, LOCATION: bedroom, OBJECTS: bed with sheets, ACTION: posing
+- "selfie avec ton café" → OBJECTS: coffee mug, phone, ACTION: holding mug, taking selfie, NSFW_LEVEL: 0
+- "bathroom mirror selfie" → OBJECTS: phone, mirror, LOCATION: bathroom, ACTION: taking selfie, NSFW_LEVEL: 0
+- "photo in a tight dress" → OBJECTS: tight dress, CLOTHING: tight dress, ACTION: posing, NSFW_LEVEL: 1
+- "photo de toi dans ta chambre au lit" → LOCATION: bedroom, OBJECTS: bed, ACTION: posing or lying, NSFW_LEVEL: 0 (NO nudity mentioned!)
+- "show me in a tiny bikini" → OBJECTS: bikini, CLOTHING: tiny bikini, ACTION: posing, NSFW_LEVEL: 1
+- "photo avec des lunettes" → OBJECTS: glasses, ACTION: wearing glasses, NSFW_LEVEL: 0
+- "une photo avec une sucette" → OBJECTS: lollipop, ACTION: holding lollipop, NSFW_LEVEL: 0
+- "photo topless seins nus" → CLOTHING: topless, ACTION: posing, NSFW_LEVEL: 3 (topless explicitly mentioned)
+- "photo sous la douche" → LOCATION: bathroom shower, OBJECTS: shower, ACTION: standing in shower, NSFW_LEVEL: 0 (NO nudity mentioned - could be clothed!)
+- "photo with wet shirt" → OBJECTS: wet shirt, CLOTHING: wet shirt, ACTION: posing, NSFW_LEVEL: 1
+
+CRITICAL NSFW RULES:
+- "bedroom" or "au lit" does NOT automatically mean NSFW! Only if nudity mentioned.
+- "shower/douche" does NOT automatically mean NSFW! Only if nudity mentioned.
+- "sexy" = NSFW 1 (suggestive, clothed)
+- "lingerie/bikini/tight dress" = NSFW 1 (suggestive, revealing clothes)
+- "topless/seins nus" = NSFW 3 (partial nudity)
+- "nude/nue/naked" = NSFW 4 (full nudity)
 
 DO NOT default to nudity. Extract EVERY specific detail mentioned by the user!"""
 
